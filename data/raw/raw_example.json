@@ -1,0 +1,72 @@
+{
+    "projects": [
+        {
+            "id": "101016553",
+            "acronym": "CLIMACT",
+            "title": "Climate Action Monitoring for EU Sustainability Goals",
+            "call": "H2020-LC-CLA-2020",
+            "fundingScheme": "RIA",
+            "status": "Active",
+            "startDate": "2021-06-01",
+            "endDate": "2025-05-31",
+            "totalCost": 4950000,
+            "euContribution": 4950000,
+            "coordinator": {
+                "name": "Technical University of Munich",
+                "country": "Germany",
+                "type": "University",
+                "pid": "999876543"
+            },
+            "participants": [
+                {
+                    "name": "University of Copenhagen",
+                    "country": "Denmark",
+                    "type": "University",
+                    "pid": "999876544"
+                },
+                {
+                    "name": "CERTH",
+                    "country": "Greece",
+                    "type": "Research Organization",
+                    "pid": "999876545"
+                }
+            ],
+            "topics": ["Climate Action", "Sustainability", "Data Analytics"],
+            "summary": "The CLIMACT project aims to develop novel methods for monitoring climate action implementation across Europe."
+        },
+        {
+            "id": "101022483",
+            "acronym": "INNOBIO",
+            "title": "Innovative Biotechnology for Sustainable Development",
+            "call": "H2020-BIO-2020",
+            "fundingScheme": "IA",
+            "status": "Completed",
+            "startDate": "2020-01-01",
+            "endDate": "2023-12-31",
+            "totalCost": 3750000,
+            "euContribution": 3250000,
+            "coordinator": {
+                "name": "University of Barcelona",
+                "country": "Spain",
+                "type": "University",
+                "pid": "999876546"
+            },
+            "participants": [
+                {
+                    "name": "Biovation GmbH",
+                    "country": "Austria",
+                    "type": "SME",
+                    "pid": "999876547"
+                }
+            ],
+            "topics": ["Biotechnology", "Sustainable Development", "Circular Economy"],
+            "summary": "INNOBIO developed new biotechnological approaches for sustainable manufacturing processes."
+        }
+    ],
+    "metadata": {
+        "totalProjects": 2,
+        "dataUpdated": "2023-11-10",
+        "source": "EU Horizon Dashboard",
+        "version": "1.0.0"
+    }
+}
