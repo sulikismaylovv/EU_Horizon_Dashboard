@@ -174,4 +174,4 @@ cython_debug/
 .pypirc
 
 # Ignore raw files (located in data/raw) that are in the data/raw folder
-data/raw/*
+data/*
