@@ -50,11 +50,13 @@ webLink_path = f'{CORDIS_framework_docs_dir}/webLink.csv'
 
 
 class CORDIS_data():
-    def __init__(self):
+    def __init__(self, enrich=True):
         '''
         Initialize class: load data from the CSV files
 
         set some global variables that we 
+        enrich (bool): if True, run the enrchment feautures. If False, load the processed data
+
 
         '''
         # Load all datasets and set as class attributes
@@ -69,12 +71,15 @@ class CORDIS_data():
         self.web_items_df = pd.read_csv(webItems_path, delimiter=';')
         self.web_link_df = pd.read_csv(webLink_path, delimiter=';')
 
-        # enrich the project DataFrame with some additional information
-        # Call enrichment functions
-        self._enrich_temporal_features()
-        self._enrich_people_and_institutions()
-        self._enrich_financial_metrics()
-        self._enrich_scientific_thematic()
+        if enrich:
+            # enrich the project DataFrame with some additional information
+            # Call enrichment functions
+            self._enrich_temporal_features()
+            self._enrich_people_and_institutions()
+            self._enrich_financial_metrics()
+            self._enrich_scientific_thematic()
+        else:
+            self.project_df = pd.read_csv(f'{processed_dir}/project_df.csv', delimiter=';')
 
         # Extract possible scientific fields
         self.scientific_fields = self.extract_scientific_fields()
