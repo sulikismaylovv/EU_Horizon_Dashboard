@@ -182,7 +182,7 @@ class CORDIS_data():
         self.project_df = self.project_df.drop(columns=['projectID']).merge(topic_titles, how='left', left_on='id', right_on='projectID')
 
 
-    def get_projects_by_scientific_field(self, keyword):
+    def get_projects_by_scientific_field(self):
         """
         Get a list of all projects filtered by the scientific field. 
         """
@@ -193,13 +193,15 @@ class CORDIS_data():
 
         # Go through  sciVoc dataframe and add acronym to the list
         for i in range(len(self.sci_voc_df)):
-            if keyword in self.sci_voc_df['euroSciVocPath'][i]:
-                project_id = self.sci_voc_df['projectID'][i]
-                acronym = self.project_df[self.project_df['id'] == project_id]['acronym'].values[0]
-                projects_per_field[str(keyword)].append(acronym)
+            for field in self.scientific_fields:
+                if field in self.sci_voc_df['euroSciVocPath'][i]:
+                    project_id = self.sci_voc_df['projectID'][i]
+                    acronym = self.project_df[self.project_df['id'] == project_id]['acronym'].values[0]
+                    projects_per_field[field].append(acronym)
                 
         # Remove duplicates
-        projects_per_field[str(keyword)] = list(set(projects_per_field[str(keyword)]))
+        for field in self.scientific_fields:
+            projects_per_field[field] = list(set(projects_per_field[field]))
         return projects_per_field
 
     def get_projects_by_institution(self, institution_keyword):
