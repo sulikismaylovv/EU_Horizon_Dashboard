@@ -7,24 +7,69 @@ This project develops an interactive Python-based dashboard for exploring, visua
 ## Project Structure
 
 ```
-horizon-dashboard/
-├── data/                      # Dataset storage
-│   ├── raw/                   # Original data files
-│   └── processed/             # Processed data files
-├── notebooks/                 # Exploratory Jupyter notebooks
-├── app/                       # Dashboard application
-│   ├── assets/                # Front-end resources (CSS, images)
-│   ├── components/            # Dash components and layouts
-│   ├── data_loader.py         # Data loading scripts
-│   ├── callbacks.py           # Interactive Dash callbacks
-│   └── app.py                 # Main Dash application script
-├── models/                    # Predictive analytics scripts
-├── deployment/                # Deployment-related files (Docker)
-├── scripts/                   # Data preprocessing and utility scripts
-├── tests/                     # Unit and integration tests
-├── docs/                      # Documentation
-├── requirements.txt           # Python dependencies
-└── README.md                  # Project overview and setup
+EU_HORIZON_DASHBOARD/
+│
+├── backend/                         # All backend/data logic lives here
+│   ├── etl/                         # Data ingestion, cleaning, transformation, load
+│   │   ├── __init__.py
+│   │   ├── ingestion.py
+│   │   ├── cleaning.py
+│   │   ├── transform.py
+│   │   ├── load_to_db.py
+│   │   └── ...
+│   │
+│   ├── db/                          # Database schema, migration, and connection logic
+│   │   ├── __init__.py
+│   │   ├── schema.sql               # SQL to create tables
+│   │   ├── supabase_client.py       # Handles connections, inserts, etc.
+│   │   └── migrate.py               # Optional: migration scripts
+│   │
+│   ├── models/                      # ML/NLP models, pipelines, forecasting, etc.
+│   │   ├── __init__.py
+│   │   ├── topic_modelling.py
+│   │   ├── forecasting.py
+│   │   └── ...
+│   │
+│   ├── api/                         # Custom API (FastAPI, Flask, etc.)
+│   │   ├── __init__.py
+│   │   ├── main.py                  # Entrypoint
+│   │   └── endpoints/               # (Optional) subfolder per endpoint
+│   │
+│   ├── utils/                       # General utilities/helpers
+│   │   ├── __init__.py
+│   │   ├── save_load.py
+│   │   └── viz_utils.py
+│   │
+│   ├── config.py
+│   └── preprocess_data.py           # Main orchestration for ETL pipeline
+│
+├── frontend/                        # Modern dashboard (React, Next.js, Shiny, Streamlit, etc.)
+│   ├── public/
+│   ├── src/
+│   ├── package.json
+│   └── ... (JS/CSS/TSX files)
+│
+├── data/                            # Data, never version control large files
+│   ├── raw/
+│   ├── interim/
+│   └── processed/
+│
+├── notebooks/                       # Prototyping, profiling, exploration (never for prod code)
+│   ├── 01_data_preparation.ipynb
+│   └── ...
+│
+├── tests/                           # Automated tests (pytest, unit tests)
+│   ├── backend/
+│   └── frontend/
+│
+├── .env                             # Secrets (never commit!)
+├── .gitignore
+├── README.md
+├── requirements.txt                 # Python requirements for backend/ETL
+├── environment.yml                  # (Optional) Conda env for reproducibility
+├── LICENSE
+└── docker-compose.yml               # (Optional) Orchestrate backend/frontend locally
+
 ```
 
 ---
