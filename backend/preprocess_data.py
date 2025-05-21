@@ -1,7 +1,7 @@
 # Script to automate the data cleaning, preprocessing, and storage of datasets into ready-to-use formats (run initially or after new data updates).
 # This script is designed to be run in a Jupyter notebook environment.
 # It includes functions to load, clean, and save datasets in various formats (CSV, Parquet, etc.).
-from src.config      import RAW_DIRS, INTERIM_DIRS, PROCESSED_DIRS, SUPPORTED_DATASETS
+from backend.config      import RAW_DIRS, INTERIM_DIRS, PROCESSED_DIRS, SUPPORTED_DATASETS
 from etl.ingestion   import load_csvs_from_dir
 from etl.cleaning    import TABLE_CLEANERS, standardize_columns
 from etl.transform   import (
@@ -10,7 +10,7 @@ from etl.transform   import (
     transform_summaries,
     transform_publications,
 )
-from src.save_load   import save_parquet
+from backend.save_load   import save_parquet
 
 def process_dataset(key: str):
     print(f"\n▶️  Processing dataset '{key}'")

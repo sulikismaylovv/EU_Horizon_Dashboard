@@ -1,7 +1,7 @@
 import csv
 from pathlib import Path
 import pandas as pd
-from src.config import RAW_DIRS
+from backend.config import RAW_DIRS
 
 def sniff_delimiter(path: Path) -> str:
     """Sample the first 2 KB and let csv.Sniffer pick ',' or ';' or '\t'."""
