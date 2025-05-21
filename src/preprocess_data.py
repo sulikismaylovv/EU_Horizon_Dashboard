@@ -2,9 +2,9 @@
 # This script is designed to be run in a Jupyter notebook environment.
 # It includes functions to load, clean, and save datasets in various formats (CSV, Parquet, etc.).
 from src.config      import RAW_DIRS, INTERIM_DIRS, PROCESSED_DIRS, SUPPORTED_DATASETS
-from src.ingestion   import load_csvs_from_dir
-from src.cleaning    import TABLE_CLEANERS, standardize_columns
-from src.transform   import (
+from etl.ingestion   import load_csvs_from_dir
+from etl.cleaning    import TABLE_CLEANERS, standardize_columns
+from etl.transform   import (
     transform_projects,
     transform_deliverables,
     transform_summaries,
