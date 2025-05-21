@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import ast
 import csv
+import os
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
 
@@ -85,6 +86,9 @@ def clean_project(df: pd.DataFrame) -> pd.DataFrame:
     for col in ['total_cost', 'ec_contribution', 'budget', 'id']:
         if col in df: df[col] = clean_numeric_column(df[col])
 
+    # convert to string    
+    df['status'] = clean_string_column(df['status'])
+
     # Remove duplicate IDs
     if 'id' in df: df = df.drop_duplicates(subset='id')
 
@@ -98,7 +102,7 @@ def clean_project(df: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 def clean_organization(df: pd.DataFrame) -> pd.DataFrame:
-    df = standardize_columns(df)
+    # df = standardize_columns(df)
     rename_map = {
         'projectid': 'project_id',
         'organisationid': 'organization_id',
@@ -137,14 +141,14 @@ def clean_organization(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[df['name']=='Purdue University', 'country']='US'
     df.loc[df['name']=='Rijk Zwaan', 'country']='NL'
     df['nutsCode'] = df['nutsCode'].fillna('XX')
-    
+
     # Try to find geolocation from city
 
     df['geolocation'] = df['geolocation'].fillna('XX')
 
     df['organizationURL'] = df['organizationURL'].fillna('about:blank')
     df['ecContribution'] = df['ecContribution'].fillna(0.0)
-    df['netEcContribution'] = organdfization_df['netEcContribution'].fillna(0.0)
+    df['netEcContribution'] = df['netEcContribution'].fillna(0.0)
 
     df['totalCost'] = df['totalCost'].fillna(0.0)
 
@@ -152,23 +156,33 @@ def clean_organization(df: pd.DataFrame) -> pd.DataFrame:
     # Merge project_df (with 'id') into organization_df (with 'projectID')
     # load project_df
     from etl.ingestion import robust_csv_reader
-    project_df = pd.robust_csv_reader('data/project.csv')
-    org_with_status = df.merge(
-        project_df[['id', 'status']],
-        left_on='projectID',
-        right_on='id',
-        how='left'
-    )
+    project_df = robust_csv_reader(f'{os.path.dirname(os.getcwd())}/data/raw/project.csv')
+    project_df['status'] = project_df['status'].astype(str).str.encode('unicode_escape').str.decode('utf-8').str.strip()
+    
+    ###### OLD METHOD ######
+    # org_with_status = df.merge(
+    #     project_df[['id', 'status']],
+    #     left_on='projectID',
+    #     right_on='id',
+    #     how='left'
+    # )
 
-    # from etl.cleaning import 
-    # Set 'active' to True if status is SIGNED, else False
-    org_with_status['active'] = org_with_status['status'].astype(str).str.encode('unicode_escape').str.decode('utf-8').str.strip() == 'SIGNED'
+    # # from etl.cleaning import 
+    # # Set 'active' to True if status is SIGNED, else False
+    # org_with_status['active'] = str(org_with_status['status'].astype(str).str.encode('unicode_escape').str.decode('utf-8').str.strip()) == 'SIGNED'
 
-    org_with_status = org_with_status.drop(columns=['id', 'status'])
+    # org_with_status = org_with_status.drop(columns=['id', 'status'])
+
+    ###### NEW METHOD ######
+    # Create a mapping from project_df id to status
+    status_map = project_df.set_index('id')['status']
+
+    # Map the status to organization_df and check if it's SIGNED
+    df['active'] = df['projectID'].map(status_map) == 'SIGNED'
     # De-duplication
-    if 'organizationID' in org_with_status and 'projectID' in org_with_status:
-        org_with_status = org_with_status.drop_duplicates(subset=['organizationID', 'projectID'])
-    return org_with_status.reset_index(drop=True)
+    if 'organizationID' in df and 'projectID' in df:
+        df = df.drop_duplicates(subset=['organizationID', 'projectID'])
+    return df.reset_index(drop=True)
 
 def clean_topics(df: pd.DataFrame) -> pd.DataFrame:
     df = standardize_columns(df)
@@ -183,10 +197,10 @@ def clean_topics(df: pd.DataFrame) -> pd.DataFrame:
 def clean_legalbasis(df: pd.DataFrame) -> pd.DataFrame:
     df = standardize_columns(df)
     # Could add mappings/validation for legal basis codes here
-
+    df.keys()
     # cover missing values
     # All values are either True or NaN => change all missing to False
-    df['uniqueProgrammePart'] = df['uniqueProgrammePart'].fillna(False)
+    df['uniqueprogrammepart'] = df['uniqueprogrammepart'].fillna(False)
     return df.drop_duplicates().reset_index(drop=True)
 
 def clean_webitem(df: pd.DataFrame) -> pd.DataFrame:

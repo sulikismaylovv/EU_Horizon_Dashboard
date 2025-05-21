@@ -23,47 +23,43 @@ from pprint import pprint
 from pathlib import Path
 import csv
 
-# define some file paths
-run_dir = os.getcwd()
-parent_dir = os.path.dirname(run_dir)
-
-raw_dir = f'{parent_dir}/data/raw'
-interim_dir = f'{parent_dir}/data/interim'
-processed_dir = f'{parent_dir}/data/processed'
-
-# define file paths to project-specific files
-data_report_path = f'{raw_dir}/reportSummaries.csv'
-data_filereport_path = f'{raw_dir}/file_report.csv'
-data_publications_path = f'{raw_dir}/projectPublications.csv'
-data_deliverables_path = f'{raw_dir}/projectDeliverables.csv'
-
-# define file paths
-CORDIS_framework_docs_dir = f'{raw_dir}/cordis-HORIZONprojects-csv'
-
-SciVoc_path = f'{CORDIS_framework_docs_dir}/euroSciVoc.csv'
-legalBasis_path = f'{CORDIS_framework_docs_dir}/legalBasis.csv'
-organization_path = f'{CORDIS_framework_docs_dir}/organization.csv'
-project_path = f'{CORDIS_framework_docs_dir}/project.csv'
-topics_path = f'{CORDIS_framework_docs_dir}/topics.csv'
-webItems_path = f'{CORDIS_framework_docs_dir}/webItem.csv'
-webLink_path = f'{CORDIS_framework_docs_dir}/webLink.csv'
-
+## load personal functions
+import sys
+sys.path.append(os.path.abspath("../../backend"))
+from etl.ingestion import inspect_bad_lines, auto_fix_row, robust_csv_reader
 
 class CORDIS_data():
-    def __init__(self, enrich=True):
+    def __init__(self, parent_dir, enrich=True):
         '''
         Initialize class: load data from the CSV files
 
         set some global variables that we 
         enrich (bool): if True, run the enrchment feautures. If False, load the processed data
 
+        Parameters:
+        - parent_dir: should be path to EU_Dashboard repo. From here on paths are specified
+        - enrich: if True, run the enrichment features. If False, load the processed data
 
         '''
+        self.parent_dir = parent_dir
+        self.raw_dir = f'{parent_dir}/data/raw'
+        self.interim_dir = f'{parent_dir}/data/interim'
+        self.processed_dir = f'{parent_dir}/data/processed'
+
+        # define some file paths
+        SciVoc_path = f'{self.raw_dir}/euroSciVoc.csv'
+        legalBasis_path = f'{self.raw_dir}/legalBasis.csv'
+        organization_path = f'{self.raw_dir}/organization.csv'
+        project_path = f'{self.raw_dir}/project.csv'
+        topics_path = f'{self.raw_dir}/topics.csv'
+        webItems_path = f'{self.raw_dir}/webItem.csv'
+        webLink_path = f'{self.raw_dir}/webLink.csv'
+
         # Load all datasets and set as class attributes
-        self.data_report = pd.read_csv(f'{interim_dir}/projectdeliverables_interim.csv', delimiter=';')
-        self.data_deliverables = pd.read_csv(f'{interim_dir}/projectdeliverables_interim.csv', delimiter=';')
-        self.data_publications = pd.read_csv(f'{interim_dir}/projectPublications_interim.csv', delimiter=';')
-        self.project_df = pd.read_csv(f'{interim_dir}/project_interim.csv', delimiter=';')
+        self.data_report = pd.read_csv(f'{self.interim_dir}/projectdeliverables_interim.csv', delimiter=';')
+        self.data_deliverables = pd.read_csv(f'{self.interim_dir}/projectdeliverables_interim.csv', delimiter=';')
+        self.data_publications = pd.read_csv(f'{self.interim_dir}/projectPublications_interim.csv', delimiter=';')
+        self.project_df = pd.read_csv(f'{self.interim_dir}/project_interim.csv', delimiter=';')
         self.sci_voc_df = pd.read_csv(SciVoc_path, delimiter=';')
         self.legal_basis_df = pd.read_csv(legalBasis_path, delimiter=';')   
         self.organization_df = pd.read_csv(organization_path, delimiter=';')
@@ -71,6 +67,7 @@ class CORDIS_data():
         self.web_items_df = pd.read_csv(webItems_path, delimiter=';')
         self.web_link_df = pd.read_csv(webLink_path, delimiter=';')
 
+        self.project_df = robust_csv_reader(project_path, delimiter=';')
         if enrich:
             # enrich the project DataFrame with some additional information
             # Call enrichment functions
@@ -78,8 +75,6 @@ class CORDIS_data():
             self._enrich_people_and_institutions()
             self._enrich_financial_metrics()
             self._enrich_scientific_thematic()
-        else:
-            self.project_df = pd.read_csv(f'{processed_dir}/project_df.csv', delimiter=';')
 
         # Extract possible scientific fields
         self.scientific_fields = self.extract_scientific_fields()
