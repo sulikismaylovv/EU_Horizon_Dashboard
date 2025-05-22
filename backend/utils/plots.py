@@ -129,7 +129,7 @@ class CORDISPlots:
         df = self.data.project_df.copy()
 
         if 'startDate' not in df.columns or 'sci_voc_paths' not in df.columns:
-            raise KeyError("Required columns 'startDate' and 'sci_voc_path' not found in project_df.")
+            raise KeyError("Required columns 'startDate' and 'sci_voc_paths' not found in project_df.")
 
         df = df.dropna(subset=['startDate', 'sci_voc_paths'])
         
