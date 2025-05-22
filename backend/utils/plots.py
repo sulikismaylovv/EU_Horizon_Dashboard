@@ -7,7 +7,7 @@ from plotly.subplots import make_subplots
 import pycountry
 
 # Import the data classes
-from data_classes import CORDIS_data, Project_data
+from classes import CORDIS_data, Project_data
 
 # Define plotting class
 class CORDISPlots:

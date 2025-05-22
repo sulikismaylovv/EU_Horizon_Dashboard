@@ -175,3 +175,20 @@ cython_debug/
 
 # Ignore raw files (located in data/raw) that are in the data/raw folder
 data/*
+
+# VS Code settings
+.vscode/
+# VS Code extensions
+.vscode-test/
+# VS Code workspace settings
+.vscode/
+
+# other IDEs
+.idea/
+# JetBrains IDEs
+.idea/
+# Eclipse IDE
+.project
+.classpath
+# NetBeans IDE
+nbproject/private/
