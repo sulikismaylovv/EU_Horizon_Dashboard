@@ -1,44 +1,40 @@
-# src/config.py
+# backend/config.py
 
 from pathlib import Path
 
-# Project root
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR: Path = Path(__file__).resolve().parent.parent
+RAW_DIR: Path = BASE_DIR / "data" / "raw"
+INTERIM_DIR: Path = BASE_DIR / "data" / "interim"
+PROCESSED_DIR: Path = BASE_DIR / "data" / "processed"
 
-# All raw data files are under /data/raw/projects/
-RAW_DIR = BASE_DIR / "data" / "raw" 
+# Default fill values for cleaning routines
+DEFAULT_FILL_STR: str = ""
+DEFAULT_FILL_NUM: int = 0
 
-# Output directories for interim and processed data
-INTERIM_DIR = BASE_DIR / "data" / "interim"
-PROCESSED_DIR = BASE_DIR / "data" / "processed"
+# Ensure directories exist
+for d in (INTERIM_DIR, PROCESSED_DIR):
+    d.mkdir(parents=True, exist_ok=True)
 
-# Mapping dataset "keys" to specific filenames for pipeline logic
-RAW_FILES = {
-    "projects": RAW_DIR / "project.csv",
-    "organizations": RAW_DIR / "organization.csv",
+RAW_FILES: dict[str, Path] = {
+    "project": RAW_DIR / "project.csv",
+    "organization": RAW_DIR / "organization.csv",
     "topics": RAW_DIR / "topics.csv",
-    "legal_basis": RAW_DIR / "legalBasis.csv",
-    "euro_sci_voc": RAW_DIR / "euroSciVoc.csv",
-    "web_item": RAW_DIR / "webItem.csv",
-    "web_link": RAW_DIR / "webLink.csv",
-
-    # Next datasetS
-    # These are the ones that are not in the projects folder
-    "deliverables": RAW_DIR / "projectDeliverables.csv",
-    "summaries": RAW_DIR / "reportSummaries.csv",
-    "publications": RAW_DIR / "projectPublications.csv",
-    # ... add more as needed
+    "legalbasis": RAW_DIR / "legalBasis.csv",
+    "euroSciVoc": RAW_DIR / "euroSciVoc.csv",
+    "webitem": RAW_DIR / "webItem.csv",
+    "weblink": RAW_DIR / "webLink.csv",
+    "projectdeliverables": RAW_DIR / "projectDeliverables.csv",
+    "reportsummaries": RAW_DIR / "reportSummaries.csv",
+    "projectpublications": RAW_DIR / "projectPublications.csv",
 }
 
-# Define logical datasets for your ETL pipeline
-DATASET_GROUPS = {
-    "projects":      ["projects", "organizations", "topics", "legal_basis", "euro_sci_voc", "web_item", "web_link"],
-    "deliverables":  ["deliverables"],
-    "summaries":     ["summaries"],
-    "publications":  ["publications"],
+DATASET_GROUPS: dict[str, list[str]] = {
+    "projects":      ["project","organization","topics","legalbasis","euroSciVoc","webitem","weblink"],
+    "deliverables":  ["projectdeliverables"],
+    "summaries":     ["reportsummaries"],
+    "publications":  ["projectpublications"],
 }
 
-# Output filenames
-def output_path(dataset, stage="interim"):
-    base = INTERIM_DIR if stage == "interim" else PROCESSED_DIR
+def output_path(dataset: str, stage: str="interim") -> Path:
+    base = INTERIM_DIR if stage=="interim" else PROCESSED_DIR
     return base / f"{dataset}.parquet"

@@ -5,6 +5,7 @@ import csv
 import os
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
+from config import DEFAULT_FILL_STR, DEFAULT_FILL_NUM
 
 ############################################################### Data cleaning functions
 
@@ -103,7 +104,8 @@ def clean_project(df: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 def clean_organization(df: pd.DataFrame) -> pd.DataFrame:
-    # df = standardize_columns(df)
+    df = standardize_columns(df)
+        # df = standardize_columns(df)
     rename_map = {
         'projectid': 'project_id',
         'organisationid': 'organization_id',

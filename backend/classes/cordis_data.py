@@ -12,7 +12,7 @@ import pandas as pd
 from datetime import datetime
 
 ## load personal functions
-from backend.etl.ingestion import inspect_bad_lines, auto_fix_row, robust_csv_reader
+from etl.ingestion import inspect_bad_lines, auto_fix_row, robust_csv_reader
 
 
 class CORDIS_data():

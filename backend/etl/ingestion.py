@@ -1,6 +1,11 @@
 import csv
 from pathlib import Path
 import pandas as pd
+import logging
+from typing import Optional
+from config import INTERIM_DIR, PROCESSED_DIR
+
+log = logging.getLogger(__name__)
 
 def sniff_delimiter(path: Path) -> str:
     """Sample the first 2 KB and let csv.Sniffer pick ',' or ';' or '\t'."""
@@ -8,20 +13,15 @@ def sniff_delimiter(path: Path) -> str:
         sample = f.read(2048)
     return csv.Sniffer().sniff(sample, delimiters=[',',';','\t']).delimiter
 
-def load_csvs_from_dir(csv_path: Path) -> dict[str, pd.DataFrame]:
-    """Load a single CSV and return {stem: DataFrame}"""
-    sep = sniff_delimiter(csv_path)
-    df = pd.read_csv(
-        csv_path,
-        sep=sep,
-        quotechar='"',
-        dtype=str,
-        na_values=['', 'NA'],
-        low_memory=False,
-        on_bad_lines='skip'
-    )
-    print(f"→ Loaded file '{csv_path.name}' with shape {df.shape}")
-    return {csv_path.stem: df}
+
+
+def load_csv(path: Path, robust: bool=False, **kwargs) -> pd.DataFrame:
+    if robust:
+        return robust_csv_reader(path, **kwargs)
+    sep = sniff_delimiter(path)
+    df = pd.read_csv(path, sep=sep, dtype=str, na_values=["","NA"], low_memory=False)
+    log.debug("Loaded %s rows from %s", df.shape, path.name)
+    return df
 
 
 ############################################################## General CSV reading functions
@@ -74,33 +74,27 @@ def auto_fix_row(row, expected_columns, problemtic_column):
     # Return the adjusted row
     return row
 
-def robust_csv_reader(filepath, expected_columns=20, problematic_column=14, delimiter=";", quotechar='"', escapechar="\\"):
-    """
-    Reads a CSV file, automatically correcting rows with inconsistent column counts.
-    """
-    with open(filepath, 'r', encoding='utf-8') as file:
-        reader = csv.reader(file, delimiter=delimiter, quotechar=quotechar, escapechar=escapechar)
-        header = next(reader)  
-        rows = []
-        bad_lines = []
 
-        for lineno, row in enumerate(reader, start=2):
-            # Apply auto-fix if the number of columns is incorrect
-            if len(row) != expected_columns:
-                row = auto_fix_row(row, expected_columns, problematic_column)
-                # If the correction fails, log the line
-                if len(row) != expected_columns:
-                    bad_lines.append((lineno, row))
-                    continue
 
+def robust_csv_reader(path, delimiter=';', **kwargs) -> pd.DataFrame:
+    """
+    Read a CSV in “robust” mode: fix rows with too few or too many columns
+    by padding/truncating to match the header, then return a DataFrame.
+    """
+    rows = []
+    with open(path, newline='', encoding=kwargs.get('encoding', 'utf-8')) as f:
+        reader = csv.reader(f, delimiter=delimiter)
+        header = next(reader)
+        n_cols = len(header)
+
+        for i, row in enumerate(reader, start=2):  # start=2 to account for header
+            if len(row) < n_cols:
+                # pad short rows
+                row.extend([''] * (n_cols - len(row)))
+            elif len(row) > n_cols:
+                # truncate long rows
+                row = row[:n_cols]
             rows.append(row)
 
-        # Report problematic lines
-        if bad_lines:
-            print(f"Number of problematic lines that could not be fixed: {len(bad_lines)}")
-            print("First 5 problematic lines:")
-            for lineno, bad_line in bad_lines[:5]:
-                print(f"Line {lineno}: {bad_line}")
-
-        # Create DataFrame
-        return pd.DataFrame(rows, columns=header)
+    # Now build DataFrame with consistent columns
+    return pd.DataFrame(rows, columns=header)

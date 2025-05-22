@@ -1,7 +1,12 @@
+#!/usr/bin/env python
 # src/preprocess_data.py
 
+import argparse
+import logging
+from pathlib import Path
+
 from config import RAW_FILES, DATASET_GROUPS, output_path
-from etl.ingestion import load_csvs_from_dir  # Will need to modify to accept a list of files
+from etl.ingestion import load_csv
 from etl.cleaning import TABLE_CLEANERS, standardize_columns
 from etl.transform import (
     transform_projects,
@@ -9,60 +14,81 @@ from etl.transform import (
     transform_summaries,
     transform_publications,
 )
-from utils.save_load import save_parquet
+from classes import CORDIS_data
+import pandas as pd
 
-def load_and_clean(file_keys):
-    """Load and clean the CSVs specified by file_keys list."""
-    dfs = {}
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
-    for key in file_keys:
-        path = RAW_FILES[key]
-        df_dict = load_csvs_from_dir(path) if path.exists() else None
-        if df_dict is not None:
-            for subkey, df in df_dict.items():
-                # Match cleaner by file stem (subkey), not dataset key
-                print(f"→ Loaded file '{subkey}' with shape {df.shape}")
+def load_and_clean(group_keys: list[str]) -> dict[str, pd.DataFrame]:
+    """
+    Load and clean the CSVs specified by group_keys list.
+    Uses the same key for path lookup and for selecting the cleaning function.
+    """
+    dfs: dict[str, pd.DataFrame] = {}
+    for key in group_keys:
+        path = RAW_FILES.get(key)
+        if path is None or not path.exists():
+            logger.warning("Missing raw file for '%s': %s", key, path)
+            continue
 
-                cleaner = TABLE_CLEANERS.get(subkey, standardize_columns)
-                cleaned_df = cleaner(df)
-                print(f"   – Cleaned: {cleaned_df.shape} rows")
-                
-                dfs[subkey] = cleaned_df  # subkey = file stem, like 'project'
+        df = load_csv(path, robust=True)
+        # Use the same key for cleaner lookup
+        logger.info("Loaded %s (%d rows)", key, len(df))
+        cleaner = TABLE_CLEANERS.get(key, standardize_columns)
+        df_clean = cleaner(df)
+        logger.info("Loaded %-18s rows=%6d  → Cleaned rows=%6d", key, len(df), len(df_clean))
+
+        dfs[key] = df_clean
+
     return dfs
 
 
+def process(group: str):
+    logger.info("Processing group '%s'", group)
+    cleaned = load_and_clean(DATASET_GROUPS[group])
 
-def process_dataset(group_key):
-    print(f"\n▶️  Processing dataset '{group_key}'")
+    # Log
+    logger.info("Loaded %d tables", len(cleaned))
 
-    file_keys = DATASET_GROUPS[group_key]
-    cleaned = load_and_clean(file_keys)
 
-    # Write each cleaned table as interim
-    for k, df in cleaned.items():
-        out_path = output_path(k, stage="interim")
-        save_parquet(df, out_path)
-        print(f"   – Interim: {out_path.name} ({df.shape[0]} rows)")
+    # save interim
+    for name, df in cleaned.items():
+        p = output_path(name, stage="interim")
+        df.to_parquet(p, index=False)
+        logger.info("Saved interim %s (%d rows)", p.name, len(df))
 
-    # Transform and join to one final table
-    if group_key == "projects":
-        print(f"→ Cleaned keys for group '{group_key}': {list(cleaned.keys())}")
-        final = transform_projects(cleaned)
-    elif group_key == "deliverables":
-        final = transform_deliverables(cleaned)
-    elif group_key == "summaries":
-        final = transform_summaries(cleaned)
-    elif group_key == "publications":
-        final = transform_publications(cleaned)
-    else:
-        raise ValueError(f"Unknown dataset group '{group_key}'")
+    # transform
+    transformer = {
+        "projects": transform_projects,
+        "deliverables": transform_deliverables,
+        "summaries": transform_summaries,
+        "publications": transform_publications,
+    }[group]
+    final = transformer(cleaned)
 
-    # Save processed table
-    out_final = output_path(group_key, stage="processed")
-    save_parquet(final, out_final)
-    print(f"   ✅  Processed '{group_key}': {final.shape[0]} rows → {out_final}")
+    p_final = output_path(group, stage="processed")
+    final.to_parquet(p_final, index=False)
+    logger.info("Saved processed %s (%d rows)", p_final.name, len(final))
+
+def enrich(parent_dir: Path):
+    logger.info("Enriching with CORDIS_data")
+    cd = CORDIS_data(parent_dir=parent_dir, enrich=True)
+    cd.export_dataframes(parent_dir / "data" / "interim", format="csv", include_all=True)
+    logger.info("Enrichment complete")
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--no-clean", dest="clean", action="store_false")
+    p.add_argument("--no-enrich", dest="enrich", action="store_false")
+    args = p.parse_args()
+
+    root = Path(__file__).resolve().parent.parent
+    if args.clean:
+        for grp in DATASET_GROUPS:
+            process(grp)
+    if args.enrich:
+        enrich(root)
 
 if __name__ == "__main__":
-    for group in DATASET_GROUPS:
-        process_dataset(group)
-    print("\n🎉 All datasets processed!")
+    main()

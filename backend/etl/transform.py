@@ -1,8 +1,12 @@
 import pandas as pd
 
 def transform_projects(dfs: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    project = dfs['project']
-    # Join legal basis
+    """
+    Expects keys: 'project','organization','topics','legalbasis' (optional),
+    'euroSciVoc' (optional), ...
+    """
+    project = dfs["project"].copy()
+        # Join legal basis
     if 'legalbasis' in dfs:
         legal = dfs['legalbasis']
         project = project.merge(legal, how='left', left_on='id', right_on='project_id', suffixes=('','_legal'))
