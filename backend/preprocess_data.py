@@ -110,7 +110,7 @@ def main():
     parser.add_argument("--no-enrich", dest="enrich", action="store_false",
                         help="Skip the enrichment stage")
     args = parser.parse_args()
-    breakpoint()
+
     root = Path(__file__).resolve().parent.parent
 
     if args.clean:
