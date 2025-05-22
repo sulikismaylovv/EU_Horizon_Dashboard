@@ -40,3 +40,5 @@ def transform_summaries(dfs: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
 def transform_publications(dfs: dict[str, pd.DataFrame]) -> pd.DataFrame:
     return max(dfs.values(), key=lambda df: df.shape[0])
+
+
