@@ -197,8 +197,8 @@ def clean_topics(df: pd.DataFrame) -> pd.DataFrame:
 
 def clean_legalbasis(df: pd.DataFrame) -> pd.DataFrame:
     df = standardize_columns(df)
-    # Could add mappings/validation for legal basis codes here
-    df.keys()
+    # Could add mappings/validation for legal basis codes here in the future.
+    # For example, validate column names or map legal basis codes to standardized values.
     # cover missing values
     # All values are either True or NaN => change all missing to False
     df['uniqueprogrammepart'] = df['uniqueprogrammepart'].fillna(False)
