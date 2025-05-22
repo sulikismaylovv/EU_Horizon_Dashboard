@@ -29,28 +29,41 @@ class Project_data(CORDIS_data):
     
     """
 
-    def __init__(self, project_id=None, acronym=None):
-        # Inherit from CORDIS_data by initialzing parent class
-        super().__init__()
+    def __init__(self,
+                 cordis_data: CORDIS_data,
+                 project_id: str = None,
+                 acronym: str = None):
+        # 1) make sure they passed you a CORDIS_data
+        if not isinstance(cordis_data, CORDIS_data):
+            raise TypeError("First argument must be a CORDIS_data instance")
 
-        # Check if both project_id and acronym are provided
+        # 2) keep a reference and some shortcuts
+        self.cordis = cordis_data
+        self.project_df      = cordis_data.project_df
+        self.data_publications = cordis_data.data_publications
+        self.data_deliverables = cordis_data.data_deliverables
+        self.organization_df   = cordis_data.organization_df
+        self.sci_voc_df        = cordis_data.sci_voc_df
+        self.topics_df         = cordis_data.topics_df
+        self.legal_basis_df    = cordis_data.legal_basis_df
+
+        # 3) now resolve the one project you care about
         self.id, self.acronym = self._resolve_project_id_acronym(project_id, acronym)
 
-        # Add all project-specific data as attributes
-        
-        self.project_info = self._get_project_info()
-        self.publications = self._get_publications()
-        self.deliverables = self._get_deliverables()
-        self.organizations = self._get_organizations()
-        self.scivoc = self._get_scivoc()
-        self.topics = self._get_topics()
-        self.legal_basis = self._get_legal_basis()
+        # 4) build your per-project views
+        self.project_info      = self._get_project_info()
+        self.publications      = self._get_publications()
+        self.deliverables      = self._get_deliverables()
+        self.organizations     = self._get_organizations()
+        self.scivoc            = self._get_scivoc()
+        self.topics            = self._get_topics()
+        self.legal_basis       = self._get_legal_basis()
 
-        # Add some enriched data
-        self.temporal_features = self._compute_temporal_features()
-        self.people_institutions = self._compute_people_institutions()
-        self.financial_metrics = self._compute_financial_metrics()
-        self.scientific_thematic = self._compute_scientific_thematic()
+        # 5) compute your summaries
+        self.temporal_features    = self._compute_temporal_features()
+        self.people_institutions  = self._compute_people_institutions()
+        self.financial_metrics    = self._compute_financial_metrics()
+        self.scientific_thematic  = self._compute_scientific_thematic()
 
     def _resolve_project_id_acronym(self, project_id, acronym):
         if project_id is not None and acronym is not None:

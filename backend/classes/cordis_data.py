@@ -93,28 +93,56 @@ class CORDIS_data():
         self.project_df = df
     
     def _enrich_people_and_institutions(self):
-        ''' 
-        This function adds some information about the people and institutions involved in the project
+        """
+        This function adds some information about the people and institutions involved in the project.
         Added features:
         - Number of institutions involved
         - List of institutions involved
         - Coordinator name (if role info is reliable)
-        '''
+        """
         print('Enriching the projects dataset with people and institutions information.')
-        # Count unique institutions per project
-        orgs = self.organization_df.groupby('projectID')['name'].nunique().reset_index(name='n_institutions')
 
-        # List all institutions
-        inst_list = self.organization_df.groupby('projectID')['name'].apply(list).reset_index(name='institutions')
+        # 0) FORCE both merge‐keys to the same dtype:
+        #    here we cast everything to string
+        self.project_df['id'] = self.project_df['id'].astype(str)
+        self.organization_df['projectID'] = self.organization_df['projectID'].astype(str)
 
-        # Coordinator (if role info is reliable)
-        coordinators = self.organization_df[self.organization_df['role'].str.lower() == 'coordinator']
-        pi_names = coordinators.groupby('projectID')['name'].first().reset_index(name='coordinator_name')
+        # 1) Count unique institutions per project
+        orgs = (
+            self.organization_df
+            .groupby('projectID')['name']
+            .nunique()
+            .reset_index(name='n_institutions')
+        )
 
-        # Merge all
-        self.project_df = self.project_df.merge(orgs, how='left', left_on='id', right_on='projectID')
-        self.project_df = self.project_df.merge(inst_list, how='left', left_on='id', right_on='projectID')
-        self.project_df = self.project_df.merge(pi_names, how='left', left_on='id', right_on='projectID')
+        # 2) List all institutions
+        inst_list = (
+            self.organization_df
+            .groupby('projectID')['name']
+            .apply(list)
+            .reset_index(name='institutions')
+        )
+
+        # 3) Coordinator (if role info is reliable)
+        coordinators = self.organization_df[
+            self.organization_df['role'].str.lower() == 'coordinator'
+        ]
+        pi_names = (
+            coordinators
+            .groupby('projectID')['name']
+            .first()
+            .reset_index(name='coordinator_name')
+        )
+
+        # 4) Merge back onto project_df
+        #    Now both 'id' and 'projectID' are strings, so no more ValueError
+        self.project_df = (
+            self.project_df
+            .merge(orgs,      how='left', left_on='id', right_on='projectID')
+            .merge(inst_list, how='left', left_on='id', right_on='projectID')
+            .merge(pi_names,  how='left', left_on='id', right_on='projectID')
+        )
+
 
     def _enrich_financial_metrics(self):
         '''
@@ -141,27 +169,58 @@ class CORDIS_data():
 
         self.project_df = df
     
+
+
+    
     def _enrich_scientific_thematic(self):
-        ''' 
+        """
         Adds scientific and thematic information to the project dataframe:
         - List of full euroSciVocPath strings per project
         - List of euroSciVocTitle values per project
         - List of topic titles from the topics.csv file
-        '''
+        """
         print('Enriching the projects dataset with thematic / scientific information.')
-        # Full paths (euroSciVocPath) per project
-        sci_paths = self.sci_voc_df.groupby('projectID')['euroSciVocPath'].apply(list).reset_index(name='sci_voc_paths')
 
-        # Titles per project
-        sci_titles = self.sci_voc_df.groupby('projectID')['euroSciVocTitle'].apply(list).reset_index(name='sci_voc_titles')
+        # 0) Ensure all keys are strings
+        self.project_df['id']            = self.project_df['id'].astype(str)
+        self.sci_voc_df['projectID']     = self.sci_voc_df['projectID'].astype(str)
+        self.topics_df['projectID']      = self.topics_df['projectID'].astype(str)
 
-        # Topics from topics.csv
-        topic_titles = self.topics_df.groupby('projectID')['title'].apply(list).reset_index(name='topic_titles')
+        # 1) Build the grouped lookup tables
+        sci_paths = (
+            self.sci_voc_df
+            .groupby('projectID')['euroSciVocPath']
+            .apply(list)
+            .reset_index(name='sci_voc_paths')
+        )
+        sci_titles = (
+            self.sci_voc_df
+            .groupby('projectID')['euroSciVocTitle']
+            .apply(list)
+            .reset_index(name='sci_voc_titles')
+        )
+        topic_titles = (
+            self.topics_df
+            .groupby('projectID')['title']
+            .apply(list)
+            .reset_index(name='topic_titles')
+        )
 
-        # Merge into project_df 
-        self.project_df = self.project_df.drop(columns=['projectID']).merge(sci_titles, how='left', left_on='id', right_on='projectID')
-        self.project_df = self.project_df.drop(columns=['projectID']).merge(sci_paths, how='left', left_on='id', right_on='projectID')
-        self.project_df = self.project_df.drop(columns=['projectID']).merge(topic_titles, how='left', left_on='id', right_on='projectID')
+        # 2) Rename their join-key to 'id' so we can merge cleanly
+        sci_paths   = sci_paths.rename(columns={'projectID':'id'})
+        sci_titles  = sci_titles.rename(columns={'projectID':'id'})
+        topic_titles = topic_titles.rename(columns={'projectID':'id'})
+
+        # 3) Merge them on the common 'id' column — no extra projectID columns, no suffix collisions
+        df = self.project_df
+        df = df.merge(sci_titles,   how='left', on='id')
+        df = df.merge(sci_paths,    how='left', on='id')
+        df = df.merge(topic_titles, how='left', on='id')
+
+        # 4) Write back
+        self.project_df = df
+
+
 
 
     def get_projects_by_scientific_field(self):
