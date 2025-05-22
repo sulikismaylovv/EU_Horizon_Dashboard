@@ -6,6 +6,8 @@ import os
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
 from backend.etl.ingestion import robust_csv_reader
+from pathlib import Path
+
 
 ############################################################### Data cleaning functions
 
@@ -157,7 +159,13 @@ def clean_organization(df: pd.DataFrame) -> pd.DataFrame:
     # get status from project_df dataframe
     # Merge project_df (with 'id') into organization_df (with 'projectID')
     # load project_df
-    project_df = robust_csv_reader(f'{os.path.dirname(os.getcwd())}/data/raw/project.csv')
+    # get project root
+    
+
+# Assuming this script is somewhere inside your project directory
+    project_root = Path(__file__).resolve().parent.parent.parent  # adjust `.parent` levels if needed
+    csv_path = project_root / 'data' / 'raw' / 'project.csv'
+    project_df = robust_csv_reader(str(csv_path))
     project_df['status'] = project_df['status'].astype(str).str.encode('unicode_escape').str.decode('utf-8').str.strip()
     
     ###### OLD METHOD ######
@@ -220,26 +228,28 @@ def clean_weblink(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def clean_deliverables(df: pd.DataFrame) -> pd.DataFrame:
+    df_std = standardize_columns(df)
+
     # If projectid or deliverableid exists, enforce uniqueness
-    if 'projectid' in df and 'deliverableid' in df:
-        df = df.drop_duplicates(subset=['projectid', 'deliverableid'])
+    if 'projectid' in df_std and 'deliverableid' in df_std:
+        df_std = df_std.drop_duplicates(subset=['projectid', 'deliverableid'])
 
     ### Cover missing values
     # change unknown deliverable types to other
-    df['deliverabletype'] = df['deliverabletype'].fillna('Other') 
+    df_std['deliverabletype'] = df_std['deliverabletype'].fillna('Other')
 
     # change empty descriptions to title of that particular row
-    df['description'] = df['description'].fillna(df['title'])
+    df_std['description'] = df_std['description'].fillna(df_std['title'])
 
     # change missing url to homepage of the particular project (only one missing)
-    df['url'] = df['url'].fillna('https://selfy-project.eu/')
+    df_std['url'] = df_std['url'].fillna('https://selfy-project.eu/')
 
     # add missing rcn number (only one missing)
-    df['rcn'] = df['rcn'].fillna(1077637.0)
+    df_std['rcn'] = df_std['rcn'].fillna(1077637.0)
     #rename projectid to projectID and deliverabletype to deliverableType
-    df = df.rename(columns={'projectid': 'projectID', 'deliverabletype': 'deliverableType'})
+    df_std = df_std.rename(columns={'projectid': 'projectID', 'deliverabletype': 'deliverableType'})
 
-    return df.reset_index(drop=True)
+    return df_std.reset_index(drop=True)
 
 
 def clean_summaries(df: pd.DataFrame) -> pd.DataFrame:
