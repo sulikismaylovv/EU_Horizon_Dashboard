@@ -17,6 +17,9 @@ from etl.transform import (
 from classes import CORDIS_data
 import pandas as pd
 
+# set the root level
+
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 

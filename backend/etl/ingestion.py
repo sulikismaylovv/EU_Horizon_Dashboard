@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 import logging
 from typing import Optional
-from backend.config import INTERIM_DIR, PROCESSED_DIR
+
 
 log = logging.getLogger(__name__)
 

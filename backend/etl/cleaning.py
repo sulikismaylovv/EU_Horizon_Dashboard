@@ -5,7 +5,6 @@ import csv
 import os
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
-from backend.config import DEFAULT_FILL_STR, DEFAULT_FILL_NUM
 from backend.etl.ingestion import robust_csv_reader
 
 ############################################################### Data cleaning functions
@@ -237,6 +236,9 @@ def clean_deliverables(df: pd.DataFrame) -> pd.DataFrame:
 
     # add missing rcn number (only one missing)
     df['rcn'] = df['rcn'].fillna(1077637.0)
+    #rename projectid to projectID and deliverabletype to deliverableType
+    df = df.rename(columns={'projectid': 'projectID', 'deliverabletype': 'deliverableType'})
+
     return df.reset_index(drop=True)
 
 
