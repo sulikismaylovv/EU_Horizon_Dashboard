@@ -12,7 +12,7 @@ import pandas as pd
 from datetime import datetime
 
 ## load personal functions
-from etl.ingestion import inspect_bad_lines, auto_fix_row, robust_csv_reader
+from backend.etl.ingestion import inspect_bad_lines, auto_fix_row, robust_csv_reader
 
 
 class CORDIS_data():
@@ -43,8 +43,8 @@ class CORDIS_data():
         webLink_path = f'{self.raw_dir}/webLink.csv'
 
         # Load all datasets and set as class attributes
-        self.data_report = pd.read_csv(f'{self.interim_dir}/projectdeliverables_interim.csv', delimiter=';')
-        self.data_deliverables = pd.read_csv(f'{self.interim_dir}/projectdeliverables_interim.csv', delimiter=';')
+        #self.data_report = pd.read_csv(f'{self.interim_dir}/project_interim.csv', delimiter=';')
+        self.data_deliverables = pd.read_csv(f'{self.interim_dir}/projectDeliverables_interim.csv', delimiter=';')
         self.data_publications = pd.read_csv(f'{self.interim_dir}/projectPublications_interim.csv', delimiter=';')
         self.project_df = pd.read_csv(f'{self.interim_dir}/project_interim.csv', delimiter=';')
         self.sci_voc_df = pd.read_csv(SciVoc_path, delimiter=';')

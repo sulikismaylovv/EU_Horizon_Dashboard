@@ -5,7 +5,8 @@ import csv
 import os
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
-from config import DEFAULT_FILL_STR, DEFAULT_FILL_NUM
+from backend.config import DEFAULT_FILL_STR, DEFAULT_FILL_NUM
+from backend.etl.ingestion import robust_csv_reader
 
 ############################################################### Data cleaning functions
 
@@ -104,8 +105,7 @@ def clean_project(df: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 def clean_organization(df: pd.DataFrame) -> pd.DataFrame:
-    df = standardize_columns(df)
-        # df = standardize_columns(df)
+
     rename_map = {
         'projectid': 'project_id',
         'organisationid': 'organization_id',
@@ -127,7 +127,7 @@ def clean_organization(df: pd.DataFrame) -> pd.DataFrame:
     for k in ['organization_id', 'project_id']:
         if k in df: df = df[df[k].notna() & (df[k] != '')]
 
-    # Cover missing values in the data structure
+
 
     df['vatNumber'] = df['vatNumber'].fillna('XX000000000')
     df['shortName'] = df['shortName'].fillna('XX')
@@ -158,7 +158,6 @@ def clean_organization(df: pd.DataFrame) -> pd.DataFrame:
     # get status from project_df dataframe
     # Merge project_df (with 'id') into organization_df (with 'projectID')
     # load project_df
-    from etl.ingestion import robust_csv_reader
     project_df = robust_csv_reader(f'{os.path.dirname(os.getcwd())}/data/raw/project.csv')
     project_df['status'] = project_df['status'].astype(str).str.encode('unicode_escape').str.decode('utf-8').str.strip()
     
@@ -218,15 +217,17 @@ def clean_weblink(df: pd.DataFrame) -> pd.DataFrame:
     df = df.dropna(how='all').reset_index(drop=True)
     return df
 
+
+
+
 def clean_deliverables(df: pd.DataFrame) -> pd.DataFrame:
-    df = standardize_columns(df)
     # If projectid or deliverableid exists, enforce uniqueness
-    if 'project_id' in df and 'deliverable_id' in df:
-        df = df.drop_duplicates(subset=['project_id', 'deliverable_id'])
-    
+    if 'projectid' in df and 'deliverableid' in df:
+        df = df.drop_duplicates(subset=['projectid', 'deliverableid'])
+
     ### Cover missing values
     # change unknown deliverable types to other
-    df['deliverableType'] = df['deliverableType'].fillna('Other') 
+    df['deliverabletype'] = df['deliverabletype'].fillna('Other') 
 
     # change empty descriptions to title of that particular row
     df['description'] = df['description'].fillna(df['title'])
@@ -237,6 +238,7 @@ def clean_deliverables(df: pd.DataFrame) -> pd.DataFrame:
     # add missing rcn number (only one missing)
     df['rcn'] = df['rcn'].fillna(1077637.0)
     return df.reset_index(drop=True)
+
 
 def clean_summaries(df: pd.DataFrame) -> pd.DataFrame:
     df = standardize_columns(df)
