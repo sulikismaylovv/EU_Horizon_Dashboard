@@ -87,7 +87,8 @@ def clean_project(df: pd.DataFrame) -> pd.DataFrame:
         if col in df: df[col] = clean_numeric_column(df[col])
 
     # convert to string    
-    df['status'] = clean_string_column(df['status'])
+    if 'status' in df.columns:
+        df['status'] = clean_string_column(df['status'])
 
     # Remove duplicate IDs
     if 'id' in df: df = df.drop_duplicates(subset='id')
