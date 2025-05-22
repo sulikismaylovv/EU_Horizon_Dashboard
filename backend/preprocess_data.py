@@ -96,7 +96,7 @@ def enrich(parent_dir: Path):
     logger.info("Enriching with CORDIS_data")
     cd = CORDIS_data(parent_dir=parent_dir, enrich=True)
     cd.export_dataframes(
-        parent_dir / "data" / "interim", format="csv", include_all=True
+        parent_dir / "data" / "processed", format="csv", include_all=True
     )
     logger.info("Enrichment complete")
 
@@ -110,7 +110,7 @@ def main():
     parser.add_argument("--no-enrich", dest="enrich", action="store_false",
                         help="Skip the enrichment stage")
     args = parser.parse_args()
-
+    breakpoint()
     root = Path(__file__).resolve().parent.parent
 
     if args.clean:

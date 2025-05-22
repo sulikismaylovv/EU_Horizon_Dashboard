@@ -6,8 +6,6 @@ import geopandas as gpd
 from plotly.subplots import make_subplots
 import pycountry
 
-# Import the data classes
-from classes import CORDIS_data, Project_data
 
 # Define plotting class
 class CORDISPlots:
