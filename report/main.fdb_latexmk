@@ -1,12 +1,12 @@
 # Fdb version 4
-["biber main"] 0 "main.bcf" "main.bbl" "main" 1748013053.2619 0
+["biber main"] 0 "main.bcf" "main.bbl" "main" 1748014036.21955 0
   "main.bcf" 0 -1 0 "pdflatex"
   "referenties.bib" 0 -1 0 ""
   (generated)
   "main.bbl"
   "main.blg"
   (rewritten before read)
-["pdflatex"] 1748013050.01311 "/Users/bertdepoorter/Nextcloud/EU_Horizon_Dashboard/report/main.tex" "main.pdf" "main" 1748013053.26259 0
+["pdflatex"] 1748014032.36024 "/Users/bertdepoorter/Nextcloud/EU_Horizon_Dashboard/report/main.tex" "main.pdf" "main" 1748014036.22029 0
   "/Users/bertdepoorter/Nextcloud/EU_Horizon_Dashboard/report/main.tex" 1748012562.79371 389 f4f50bda93b67e4061521f71f50ec94d ""
   "/usr/local/texlive/2025/texmf-dist/fonts/enc/dvips/tex-gyre/q-rm.enc" 1529098226 2409 c64dab22331c83731e970f6020b4448b ""
   "/usr/local/texlive/2025/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
@@ -185,19 +185,19 @@
   "/usr/local/texlive/2025/texmf-var/web2c/pdftex/pdflatex.fmt" 1745572722 3345738 a4c3f0fea38feb7fd66ef8dadd872abe ""
   "/usr/local/texlive/2025/texmf.cnf" 1741450484 577 418a7058ec8e006d8704f60ecd22c938 ""
   "figures/logo_kul.png" 1748012500.83637 2288 d4be9217bfb5a0eab8ba9c8da96a1e73 ""
-  "frontpage.aux" 1748013052.62118 4139 acb7f184d4b4e11b51c0f2d28ceb8cfd "pdflatex"
+  "frontpage.aux" 1748014035.5679 4139 acb7f184d4b4e11b51c0f2d28ceb8cfd "pdflatex"
   "frontpage.tex" 1748012885.33388 788 284d3a4e50210d23d2c0a2c99df051aa ""
-  "main.aux" 1748013052.65096 764 5d667aeb8ef6cbec081d96f020e320fe "pdflatex"
+  "main.aux" 1748014035.61136 961 06284410c41a646657d10131cacf91ef "pdflatex"
   "main.bbl" 0 -1 0 "biber main"
-  "main.run.xml" 1748013052.66178 2304 99dd055ace3269d202d756bdb8ccaf30 "pdflatex"
+  "main.run.xml" 1748014035.6226 2304 99dd055ace3269d202d756bdb8ccaf30 "pdflatex"
   "main.tex" 1748012562.79371 389 f4f50bda93b67e4061521f71f50ec94d ""
   "packages.tex" 1748011778.57562 1185 e64afc5337f37584b1bdebc69bb51947 ""
-  "section/results.aux" 1748013052.64942 4145 61be8e83cda8c9e2b8f1e3efcfe3c84f "pdflatex"
+  "section/results.aux" 1748014035.60993 4145 0a8ce70db2f8f3b5e56b53f079e77a69 "pdflatex"
   "section/results.tex" 0 -1 0 ""
-  "sections/implementation.aux" 1748013052.64522 4268 ef85d07baf29f8c02f30e6afe6be7edb "pdflatex"
+  "sections/implementation.aux" 1748014035.60575 4268 819e7f999557597117bd28f8adc4a9ae "pdflatex"
   "sections/implementation.tex" 1748013045.84075 122 aaca0011be1bc3e317932cc81ae47cd4 ""
-  "sections/introduction.aux" 1748013052.62587 4151 e92db865aea22e630495c4dc9c1eb2d0 "pdflatex"
-  "sections/introduction.tex" 1748012452.88763 0 d41d8cd98f00b204e9800998ecf8427e ""
+  "sections/introduction.aux" 1748014035.58795 4264 7db32a9bf5071a1f3549249238add788 "pdflatex"
+  "sections/introduction.tex" 1748014031.92952 92 e060451c23153d9026ac145b6db9a038 ""
   (generated)
   "frontpage.aux"
   "main.aux"
