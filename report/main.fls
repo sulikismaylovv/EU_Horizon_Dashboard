@@ -377,6 +377,8 @@ OUTPUT sections/introduction.aux
 INPUT ./sections/introduction.tex
 INPUT ./sections/introduction.tex
 INPUT sections/introduction.tex
+INPUT /usr/local/texlive/2025/texmf-dist/fonts/tfm/public/tex-gyre/rm-qplr.tfm
+INPUT /usr/local/texlive/2025/texmf-dist/fonts/tfm/public/tex-gyre/rm-qplb.tfm
 INPUT ./sections/implementation.tex
 INPUT ./sections/implementation.tex
 OUTPUT sections/implementation.aux
