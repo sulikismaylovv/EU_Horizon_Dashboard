@@ -62,6 +62,11 @@ class CORDIS_data():
             self._enrich_people_and_institutions()
             self._enrich_financial_metrics()
             self._enrich_scientific_thematic()
+        else:
+            # Load the processed data
+            self.project_df = pd.read_csv(f'{self.processed_dir}/project_df.csv')
+            self.data_deliverables = pd.read_csv(f'{self.processed_dir}/data_deliverables.csv')
+            self.data_publications = pd.read_csv(f'{self.processed_dir}/data_publications.csv')
 
         # Extract possible scientific fields
         self.scientific_fields = self.extract_scientific_fields()
@@ -219,9 +224,6 @@ class CORDIS_data():
 
         # 4) Write back
         self.project_df = df
-
-
-
 
     def get_projects_by_scientific_field(self):
         """

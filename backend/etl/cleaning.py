@@ -83,8 +83,8 @@ def clean_project(df: pd.DataFrame) -> pd.DataFrame:
     df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
     # standardize columns
 
-    if 'start_date' in df: df['start_date'] = clean_date_column(df['start_date'])
-    if 'end_date' in df: df['end_date'] = clean_date_column(df['end_date'])
+    if 'startDate' in df: df['startDate'] = clean_date_column(df['startDate'])
+    if 'endDate' in df: df['endDate'] = clean_date_column(df['endDate'])
     # Numeric
     for col in ['total_cost', 'ec_contribution', 'budget', 'id']:
         if col in df: df[col] = clean_numeric_column(df[col])

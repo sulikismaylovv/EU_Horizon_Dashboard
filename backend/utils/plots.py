@@ -6,8 +6,6 @@ import geopandas as gpd
 from plotly.subplots import make_subplots
 import pycountry
 
-# Import the data classes
-from classes import CORDIS_data, Project_data
 
 # Define plotting class
 class CORDISPlots:
@@ -65,19 +63,90 @@ class CORDISPlots:
             title="Distribution of EC Funding per Project"
         )
 
-    def plot_collaboration_network(self):
-        df = self.data.organization_df
-        collaborations = df.groupby(['projectID', 'name']).size().reset_index(name='count')
+    def plot_collaboration_network(self, 
+                                   field_filter=None, 
+                                   org_types = None, 
+                                   max_projects=1000, 
+                                   min_participants=2, 
+                                   countries=None,
+                                   disciplines=None,
+                                   year=None,
+                                   contribution=None,
+                                   project_type=None):
+        '''
+        Function to plot the collaboration network of institutions involved in projects
+        Parameters:
+        -----------------
+        - field_filter: Optional filter for scientific field
+        - max_projects: Maximum number of projects to include in the plot, to avoid cluttering 
+            (default: 1000, which is still too much)
+        - min_participants: minimum of participating institutions in a=project to be included. 
+            (default: 2, which is the minimum for a collaboration)
+        - org_types: List of organization types to include in the plot.
+            (default: ['HES', 'REC', 'PUB', 'PRC', 'SME']) => all types
+        - countries: list of counntries of which we include institutions in the plot.
+            default: None, which means all countries are included.
 
-        project_groups = collaborations.groupby('projectID')['name'].apply(list)
-        edges = []
-        for institutions in project_groups:
-            for i in range(len(institutions)):
-                for j in range(i + 1, len(institutions)):
-                    edges.append((institutions[i], institutions[j]))
+        Returns:
+        -----------------   
+        - Plotly figure object
+        '''
+        df_proj = self.data.project_df
+        df_org = self.data.organization_df
+        # Filter for relevant organization types
+        if org_types is None:
+            org_types = ['HES', 'REC', 'PUB', 'PRC', 'SME']
+        else:
+            assert type(org_types) == list or type(org_types) == np.array
+
+        # Apply scientific field filter if provided
+        if field_filter:
+            # Filter projects based on scientific field
+            df_proj = df_proj[df_proj['sci_voc_titles'].apply(lambda field: field_filter in field if isinstance(field, str) else False)]
+            project_ids = df_proj['projectID'].unique()
+            df_org = df_org[df_org['projectID'].isin(project_ids)]
+            
+        if org_types:
+            df_org =df_org[df_org['activityType'].astype(str).isin(org_types)]
+
+        if countries:
+            df_org = df_org[df_org['country'].astype(str).isin(countries)]
+
+        if disciplines:
+            for discipline in disciplines:
+                df_org = df_org[df_org['discipline'].astype(str).str.contains(discipline, na=False)]
+
+        if year:
+            df_org = df_org[df_org['startDate'].astype(str).str.contains(year, na=False)]
+
+        if contribution:
+            df_org = df_org[df_org['contribution'].astype(float) >= contribution]
+   
+        if project_type:
+            for call in project_type:
+                
+                df_org = df_org[df_org['fundingScheme'].astype(str).str.contains(call, na=False)]
+
+        df_org = df_org[['projectID', 'name']].drop_duplicates()
+
+        # Group by project and filter based on number of participants
+        collab_df = df_org.groupby('projectID')['name'].apply(list).reset_index()
+        collab_df = collab_df[collab_df['name'].apply(lambda x: len(x) >= min_participants)]
+        collab_df = collab_df.head(max_projects)
+
+        from itertools import combinations
+        from collections import Counter
+
+        # Build edge list
+        edge_list = []
+        for names in collab_df['name']:
+            edge_list.extend(combinations(names, 2))
+        edge_counts = Counter(edge_list)
 
         G = nx.Graph()
-        G.add_edges_from(edges)
+        for (u, v), weight in edge_counts.items():
+            G.add_edge(u, v, weight=weight)
+
         pos = nx.spring_layout(G, k=0.15, iterations=20)
 
         edge_x, edge_y = [], []
@@ -110,10 +179,13 @@ class CORDISPlots:
                 color='blue',
                 size=10,
                 line_width=2))
-
+        if field_filter:
+            title = f'Institution Collaboration Network for {field_filter}'
+        else:
+            title = 'Institution Collaboration Network'
         fig = go.Figure(data=[edge_trace, node_trace],
                         layout=go.Layout(
-                            title='Institution Collaboration Network',
+                            title=title,
                             showlegend=False,
                             hovermode='closest',
                             margin=dict(b=20, l=5, r=5, t=40),
