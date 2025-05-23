@@ -226,6 +226,63 @@ class CORDIS_data():
         # sciVoc columns do not cover all projects. We set the NaNs to specific values
         df['sci_voc_titles'] = df['sci_voc_titles'].apply(lambda x: x if isinstance(x, list) else ['other'])
         df['sci_voc_paths'] = df['sci_voc_paths'].apply(lambda x: x if isinstance(x, list) else ['other'])
+        
+        # add field_class, field, subfield to the DataFrame
+        def get_level(x, level):
+            '''
+            this function checks if the string separated by / has sufficient levels of depth 
+            If not, return None
+            '''
+            parts = x.split('/')
+            return parts[level] if len(parts) > level else None
+
+        field_classes = (
+            self.sci_voc_df
+            .groupby('projectID')['euroSciVocPath']
+            .apply(lambda x: list(set(get_level(i, 1) for i in x)))
+            .reset_index(name='field_class')
+        )
+
+        fields = (
+            self.sci_voc_df
+            .groupby('projectID')['euroSciVocPath']
+            .apply(lambda x: list(set(get_level(i, 2) for i in x if get_level(i, 2) is not None)))
+            .reset_index(name='field')
+        )
+
+        subfields = (
+            self.sci_voc_df
+            .groupby('projectID')['euroSciVocPath']
+            .apply(lambda x: list(set(get_level(i, 3) for i in x if get_level(i, 3) is not None)))
+            .reset_index(name='subfield')
+        )
+
+        niche = (
+            self.sci_voc_df
+            .groupby('projectID')['euroSciVocPath']
+            .apply(lambda x: list(set(get_level(i, 4) for i in x if get_level(i, 4) is not None)))
+            .reset_index(name='niche')
+        )
+
+        # rename identification key
+        field_classes   = field_classes.rename(columns={'projectID':'id'})
+        fields  = fields.rename(columns={'projectID':'id'})
+        subfields = subfields.rename(columns={'projectID':'id'})
+        niche = niche.rename(columns={'projectID':'id'})
+
+        # Merge on common identification column
+        df = self.project_df
+        df = df.merge(field_classes,   how='left', on='id')
+        df = df.merge(fields,    how='left', on='id')
+        df = df.merge(subfields, how='left', on='id')
+        df = df.merge(niche, how='left', on='id')
+
+        # cover missing values
+        # Not all projects are present in the SciVoc dataset
+        df['field_class'] = df['field_class'].apply(lambda x: x if isinstance(x, list) else ['other'])
+        df['field'] = df['field'].apply(lambda x: x if isinstance(x, list) else ['other'])
+        df['subfield'] = df['subfield'].apply(lambda x: x if isinstance(x, list) else ['other'])
+        df['niche'] = df['niche'].apply(lambda x: x if isinstance(x, list) else ['other'])
 
         # 4) Write back
         self.project_df = df
