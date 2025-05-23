@@ -147,7 +147,6 @@ def clean_organization(df: pd.DataFrame) -> pd.DataFrame:
     df['nutsCode'] = df['nutsCode'].fillna('XX')
 
     # Try to find geolocation from city
-
     df['geolocation'] = df['geolocation'].fillna('XX')
 
     df['organizationURL'] = df['organizationURL'].fillna('about:blank')
