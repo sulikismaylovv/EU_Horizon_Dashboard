@@ -191,6 +191,7 @@ def clean_organization(df: pd.DataFrame) -> pd.DataFrame:
     # De-duplication
     if 'organizationID' in df and 'projectID' in df:
         df = df.drop_duplicates(subset=['organizationID', 'projectID'])
+        
     return df.reset_index(drop=True)
 
 def clean_topics(df: pd.DataFrame) -> pd.DataFrame:

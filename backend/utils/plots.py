@@ -2,7 +2,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 import networkx as nx
 import pandas as pd
-import geopandas as gpd
 from plotly.subplots import make_subplots
 import pycountry
 
