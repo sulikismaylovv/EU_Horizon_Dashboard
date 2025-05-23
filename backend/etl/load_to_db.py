@@ -200,6 +200,14 @@ def load_topics():
     schema = ["code", "title"]
     cols = [c for c in schema if c in df.columns]
     
+    
+    if "code" not in df.columns:
+        logging.error(f"Column 'code' missing in {path}. Columns found: {df.columns.tolist()}")
+        return
+    if "title" not in df.columns:
+        logging.error(f"Column 'title' missing in {path}. Columns found: {df.columns.tolist()}")
+        return
+    
     df = df[cols]
     before = len(df)
     df = df[df["code"].notnull() & (df["code"].astype(str).str.strip() != "")]
@@ -215,6 +223,17 @@ def load_legal_basis():
     if df.empty: return
     schema = ["code", "title", "unique_programme_part"]
     cols = [c for c in schema if c in df.columns]
+    
+    if "code" not in df.columns:
+        logging.error(f"Column 'code' missing in {path}. Columns found: {df.columns.tolist()}")
+        return
+    if "title" not in df.columns:
+        logging.error(f"Column 'title' missing in {path}. Columns found: {df.columns.tolist()}")
+        return
+    if "unique_programme_part" not in df.columns:
+        logging.error(f"Column 'unique_programme_part' missing in {path}. Columns found: {df.columns.tolist()}")
+        return
+    
     
     df = df[cols]
     before = len(df)
@@ -298,12 +317,24 @@ def load_sci_voc():
     schema = ["code", "path", "title", "description"]
     cols = [c for c in schema if c in df.columns]
 
+    if "code" not in df.columns:
+        logging.error(f"Column 'code' missing in {path}. Columns found: {df.columns.tolist()}")
+        return
+    if "path" not in df.columns:
+        logging.error(f"Column 'path' missing in {path}. Columns found: {df.columns.tolist()}")
+        return
+    if "title" not in df.columns:
+        logging.error(f"Column 'title' missing in {path}. Columns found: {df.columns.tolist()}")
+        return
+    if "description" not in df.columns:
+        logging.error(f"Column 'description' missing in {path}. Columns found: {df.columns.tolist()}")
+        return
+    
     before = len(df)
     df = df[df["code"].notnull() & (df["code"].astype(str).str.strip() != "")]
     after = len(df)
     if before != after:
         logging.warning(f"Removed {before - after} sci_voc rows with empty/null code.")
-
 
     batch_insert("sci_voc", df[cols].to_dict(orient="records"))
 
