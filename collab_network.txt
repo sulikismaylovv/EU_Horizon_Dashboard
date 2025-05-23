@@ -1,0 +1,23 @@
+
+
+Collaboration network:
+
+For the collaboration network: I am not sure there is much to be gained there from pulling from a database. The filtering requires things like drop_duplicates, unique(), ... to reduce redundant collaborations from the collab_df (which highly depends on the filters so cannot be stored in a database I think)
+
+What we can store: two DataFrames 
+
+From self.data.project_df (usually df_proj):
+
+'sci_voc_titles' (for field filtering)
+'projectID' (for joining/filtering)
+'fundingScheme' (for project_type filtering)
+
+From self.data.organization_df (usually df_org):
+
+'projectID' (for joining/grouping)
+'name' (institution name, for nodes)
+'activityType' (for org_types filtering)
+'country' (for countries filtering)
+'discipline' (for disciplines filtering)
+'startDate' (for year filtering)
+'contribution' (for contribution filtering)
