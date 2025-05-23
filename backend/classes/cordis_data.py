@@ -222,6 +222,11 @@ class CORDIS_data():
         df = df.merge(sci_paths,    how='left', on='id')
         df = df.merge(topic_titles, how='left', on='id')
 
+        # cover missing values
+        # sciVoc columns do not cover all projects. We set the NaNs to specific values
+        df['sci_voc_titles'] = df['sci_voc_titles'].apply(lambda x: x if isinstance(x, list) else ['other'])
+        df['sci_voc_paths'] = df['sci_voc_paths'].apply(lambda x: x if isinstance(x, list) else ['other'])
+
         # 4) Write back
         self.project_df = df
 
