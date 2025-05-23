@@ -1,153 +1,186 @@
--- === Projects ===
-create table projects (
-  id                bigint primary key,      -- Prefer "projectID" from your CSV as PK
-  rcn               text not null unique,
-  grant_doi         text,
-  title             text,
-  start_date        date,
-  end_date          date,
-  ec_signature      date,
-  total_cost        numeric(18, 2),
-  ec_contribution   numeric(18, 2),
-  created_at        timestamptz default now()
+-- supabase/migrations/20250523_create_core_tables.sql
+
+BEGIN;
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- 1) Projects (from project_df.csv / processed_example.json)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CREATE TABLE public.projects (
+  id                         bigint    PRIMARY KEY,        -- CORDIS project ID
+  acronym                    text      NOT NULL,
+  status                     text,
+  title                      text,
+  start_date                 date,
+  end_date                   date,
+  total_cost                 numeric,
+  ec_max_contribution        numeric,
+  ec_signature_date          date,
+  framework_programme        text,
+  master_call                text,
+  sub_call                   text,
+  funding_scheme             text,
+  nature                     text,
+  objective                  text,
+  content_update_date        timestamptz,
+  rcn                        text      UNIQUE,             -- record contract number
+  grant_doi                  text,
+  duration_days              integer,
+  duration_months            integer,
+  duration_years             integer,
+  n_institutions             integer,
+  coordinator_name           text,
+  ec_contribution_per_year   numeric,
+  total_cost_per_year        numeric
 );
 
--- === Topics (Normalized) ===
-create table topics (
-  id                text primary key,        -- e.g., 'HORIZON-EIE-2022-CONNECT-01-01'
-  title             text
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- 2) Topics (from topics_df.csv + project_df.topics)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CREATE TABLE public.topics (
+  code       text     PRIMARY KEY,   -- e.g. 'SUSTAIN'
+  title      text
 );
 
-create table project_topics (
-  project_id        bigint not null references projects(id) on delete cascade,
-  topic_id          text not null references topics(id) on delete cascade,
-  primary key (project_id, topic_id)
+CREATE TABLE public.project_topics (
+  project_id bigint  NOT NULL REFERENCES public.projects(id),
+  topic_code text    NOT NULL REFERENCES public.topics(code),
+  PRIMARY KEY (project_id, topic_code)
 );
 
--- === Science Vocabulary (Normalized) ===
-create table sci_voc (
-  code              text primary key,         -- euroSciVocCode
-  path              text,
-  title             text,
-  description       text
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- 3) Legal Basis (from legal_basis_df.csv + project_df.legalBasis)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CREATE TABLE public.legal_basis (
+  code                   text PRIMARY KEY,   -- e.g. 'ERC-2020-COG'
+  title                  text,
+  unique_programme_part  text
 );
 
-create table project_sci_voc (
-  project_id        bigint not null references projects(id) on delete cascade,
-  sci_voc_code      text not null references sci_voc(code) on delete cascade,
-  primary key (project_id, sci_voc_code)
+CREATE TABLE public.project_legal_basis (
+  project_id        bigint  NOT NULL REFERENCES public.projects(id),
+  legal_basis_code  text    NOT NULL REFERENCES public.legal_basis(code),
+  PRIMARY KEY (project_id, legal_basis_code)
 );
 
--- === Organizations ===
-create table organizations (
-  id                bigint primary key,       -- organisationID
-  vat_number        text,
-  name              text,
-  short_name        text,
-  sme               boolean,
-  activity_type     text,
-  street            text,
-  post_code         text,
-  city              text,
-  country           text,
-  nuts_code         text,
-  geolocation       text,
-  organization_url  text,
-  contact_form      text
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- 4) Organizations (from organization_df.csv)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CREATE TABLE public.organizations (
+  id                    bigint    PRIMARY KEY,  -- organisationID
+  name                  text      NOT NULL,
+  short_name            text,
+  vat_number            text,
+  sme                   boolean,
+  activity_type         text,
+  street                text,
+  post_code             text,
+  city                  text,
+  country               text,
+  nuts_code             text,
+  geolocation           text,
+  organization_url      text,
+  contact_form          text,
+  content_update_date   timestamptz
 );
 
-create table project_organizations (
-  project_id        bigint not null references projects(id) on delete cascade,
-  organization_id   bigint not null references organizations(id) on delete cascade,
-  role              text,
-  ec_contribution   numeric(18,2),
-  net_ec_contribution numeric(18,2),
-  total_cost        numeric(18,2),
+CREATE TABLE public.project_organizations (
+  project_id          bigint   NOT NULL REFERENCES public.projects(id),
+  organization_id     bigint   NOT NULL REFERENCES public.organizations(id),
+  role                text,
+  order_index         integer,
+  ec_contribution     numeric,
+  net_ec_contribution numeric,
+  total_cost          numeric,
   end_of_participation boolean,
-  active            boolean,
-  order_in_project  int,
-  rcn               bigint,
-  primary key (project_id, organization_id, role)
+  active              boolean,
+  PRIMARY KEY (project_id, organization_id)
 );
 
--- === Legal Basis ===
-create table legal_basis (
-  code              text primary key,         -- legalBasis
-  title             text
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- 5) Deliverables (from data_deliverables.csv)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CREATE TABLE public.deliverables (
+  id                    text      PRIMARY KEY,
+  project_id            bigint    NOT NULL REFERENCES public.projects(id),
+  title                 text,
+  deliverable_type      text,
+  description           text,
+  url                   text,
+  collection            text,
+  content_update_date   timestamptz
 );
 
-create table project_legal_basis (
-  project_id        bigint not null references projects(id) on delete cascade,
-  legal_basis_code  text not null references legal_basis(code) on delete cascade,
-  unique_programme_part boolean,
-  primary key (project_id, legal_basis_code)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- 6) Publications (from data_publications.csv)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CREATE TABLE public.publications (
+  id                    text      PRIMARY KEY,
+  project_id            bigint    NOT NULL REFERENCES public.projects(id),
+  title                 text,
+  is_published_as       text,
+  authors               text,
+  journal_title         text,
+  journal_number        text,
+  published_year        integer,
+  published_pages       text,
+  issn                  text,
+  isbn                  text,
+  doi                   text,
+  collection            text,
+  content_update_date   timestamptz
 );
 
--- === Deliverables ===
-create table deliverables (
-  id                text primary key,
-  project_id        bigint not null references projects(id) on delete cascade,
-  description       text,
-  metadata          jsonb not null             -- All extra fields (title, url, etc.)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- 7) Scientific Vocabulary (from sci_voc_df.csv + project_df.sci_voc_fields)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CREATE TABLE public.sci_voc (
+  code         text     PRIMARY KEY,
+  path         text,
+  title        text,
+  description  text
 );
 
--- === Publications ===
-create table publications (
-  id                text primary key,
-  project_id        bigint not null references projects(id) on delete cascade,
-  doi               text,
-  metadata          jsonb not null
+CREATE TABLE public.project_sci_voc (
+  project_id    bigint  NOT NULL REFERENCES public.projects(id),
+  sci_voc_code  text    NOT NULL REFERENCES public.sci_voc(code),
+  PRIMARY KEY (project_id, sci_voc_code)
 );
 
--- === Report Summaries (Optional, Placeholder) ===
-create table report_summaries (
-  id                text primary key,
-  project_id        bigint not null references projects(id) on delete cascade,
-  summary           text,
-  metadata          jsonb not null
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- 8) Web Items & Links (from web_items_df.csv + web_link_df.csv)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CREATE TABLE public.web_items (
+  id                 serial   PRIMARY KEY,
+  language           text,
+  available_languages text[],
+  uri                text,
+  title              text,
+  type               text,
+  source             text,
+  represents         bigint   REFERENCES public.projects(id)
 );
 
--- === Web Items (images, files, etc.) ===
-create table web_items (
-  id                serial primary key,
-  uri               text,
-  language          text,
-  available_languages text,
-  title             text,
-  type              text,
-  source            text,
-  represents        text
+CREATE TABLE public.web_links (
+  id                 text     PRIMARY KEY,
+  project_id         bigint   REFERENCES public.projects(id),
+  phys_url           text,
+  available_languages text[],
+  status             text,
+  archived_date      timestamptz,
+  type               text,
+  source             text,
+  represents         bigint
 );
 
--- === Web Links (project documents, websites, etc.) ===
-create table web_links (
-  id                text primary key,
-  project_id        bigint references projects(id) on delete cascade,
-  phys_url          text,
-  available_languages text,
-  status            text,
-  archived_date     date,
-  type              text,
-  source            text,
-  represents        text
-);
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- 9) INDEXES
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CREATE INDEX idx_projects_start_date       ON public.projects(start_date);
+CREATE INDEX idx_projects_end_date         ON public.projects(end_date);
+CREATE INDEX idx_project_topics_topic      ON public.project_topics(topic_code);
+CREATE INDEX idx_project_legal_basis_basis ON public.project_legal_basis(legal_basis_code);
+CREATE INDEX idx_proj_orgs_org             ON public.project_organizations(organization_id);
+CREATE INDEX idx_project_sci_voc_sci       ON public.project_sci_voc(sci_voc_code);
 
--- === Indexes (as before) ===
-create index idx_projects_start_date on projects (start_date);
-create index idx_projects_end_date on projects (end_date);
-
-create index idx_project_topics_project on project_topics (project_id);
-create index idx_project_sci_voc_project on project_sci_voc (project_id);
-create index idx_project_organizations_project on project_organizations (project_id);
-
-create index idx_deliverables_project on deliverables (project_id);
-create index idx_publications_project on publications (project_id);
-
-create index idx_publications_doi on publications (doi);
-create index idx_report_summaries_project on report_summaries (project_id);
-create index idx_web_items_uri on web_items (uri);
-create index idx_web_links_project on web_links (project_id);
-create index idx_web_links_phys_url on web_links (phys_url);
-create index idx_web_links_type on web_links (type);
-
--- You can add more indexes as needed!
+COMMIT;
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
