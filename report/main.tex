@@ -1,0 +1,22 @@
+\documentclass[11pt, a4paper]{report}
+\input{packages}
+
+\begin{document}
+
+\pagenumbering{roman} % Andere nummering bij eerste pagina's
+\pagestyle{plain} % Geen headers op eerste pagina's
+
+\include{frontpage}
+
+\newgeometry{margin=2.5cm}
+
+\pagenumbering{arabic}
+
+
+\include{sections/introduction}
+\include{sections/implementation}
+\include{section/results}
+
+\printbibliography
+
+\end{document}
