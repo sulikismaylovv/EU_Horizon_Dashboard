@@ -2,59 +2,83 @@ import pandas as pd
 import json
 import os
 import logging
+import math
+from dateutil.parser import parse as date_parse
 from backend.db.supabase_client import supabase
 
 logging.basicConfig(level=logging.INFO)
 
-def make_json_safe(records):
-    """Convert any pandas Timestamp or datetime objects in dicts to isoformat strings."""
+# On conflict keys by table (adjust if needed to match your DB schema!)
+ON_CONFLICT_KEYS = {
+    "projects": "id",
+    "project_organizations": "project_id,organization_id",
+    "project_topics": "project_id,topic_code",
+    "project_legal_basis": "project_id,legal_basis_code",
+    "project_sci_voc": "project_id,sci_voc_code",
+    "topics": "code",
+    "legal_basis": "code",
+    "organizations": "id",
+    "sci_voc": "code",
+    "deliverables": "id",
+    "publications": "id",
+    "web_items": "id",
+    "web_links": "id"
+}
+
+def clean_date(val):
+    """Return ISO string if val is a valid date, else None."""
+    try:
+        if pd.isnull(val) or val in ("NaT", "nan", "None", "", None):
+            return None
+        # Try pandas to_datetime first (handles weird types)
+        dt = pd.to_datetime(val, errors='coerce')
+        if pd.isnull(dt):
+            return None
+        return dt.isoformat()
+    except Exception:
+        try:
+            # Try generic parser for odd string dates
+            dt = date_parse(str(val), fuzzy=True)
+            return dt.isoformat()
+        except Exception:
+            return None
+
+def fix_floats_and_dates(records, date_fields=None):
+    """Cleans all rows for JSON insert, handles floats, inf, NaT, and dates."""
+    if date_fields is None:
+        date_fields = set()
     for row in records:
         for k, v in row.items():
-            if isinstance(v, (pd.Timestamp, pd.DatetimeTZDtype)):
-                row[k] = v.isoformat() if pd.notnull(v) else None
-            elif hasattr(v, 'isoformat'):
-                try:
-                    row[k] = v.isoformat()
-                except Exception:
-                    row[k] = str(v)
-    return records
-
-import math
-
-def fix_floats_and_dates(records):
-    """Convert pandas NaN, inf, -inf, NaT, and pd.Timestamp etc. to JSON-safe values (None or ISO string)."""
-    import math
-    for row in records:
-        for k, v in row.items():
-            # Handle NaN, inf, -inf
-            if isinstance(v, float):
+            # Date cleaning (force to None if not a valid date)
+            if k in date_fields:
+                row[k] = clean_date(v)
+            # Numeric NaN/inf
+            elif isinstance(v, float):
                 if math.isnan(v) or math.isinf(v):
                     row[k] = None
-            # Handle pandas Timestamp, datetime, and NaT
+            # pd.Timestamp or generic date with isoformat
             elif hasattr(v, 'isoformat'):
                 try:
-                    if pd.isnull(v) or str(v) == 'NaT':
-                        row[k] = None
-                    else:
-                        row[k] = v.isoformat()
+                    row[k] = v.isoformat() if pd.notnull(v) else None
                 except Exception:
                     row[k] = str(v)
-            # Explicitly catch 'NaT' string
-            elif isinstance(v, str) and v == 'NaT':
+            # NaT as string
+            elif isinstance(v, str) and v in ['NaT', 'nan', 'inf', '-inf']:
                 row[k] = None
     return records
 
-
-
-def batch_insert(table: str, records: list, batch_size: int = 500):
-    """Insert records into a Supabase table in batches, with logging."""
-    records = fix_floats_and_dates(records)
+def batch_insert(table: str, records: list, date_fields=None, batch_size: int = 500):
+    if not records: return
+    records = fix_floats_and_dates(records, date_fields or set())
+    on_conflict = ON_CONFLICT_KEYS.get(table, None)
     for i in range(0, len(records), batch_size):
         batch = records[i : i + batch_size]
-        res = supabase.table(table).insert(batch).execute()
+        if on_conflict:
+            res = supabase.table(table).upsert(batch, on_conflict=on_conflict).execute()
+        else:
+            res = supabase.table(table).insert(batch).execute()
         if getattr(res, "status_code", None) not in (200, 201):
-            logging.error(f"Error inserting into {table}: {res}")
-
+            logging.error(f"Error inserting/upserting into {table}: {res}")
 
 def safe_load_csv(path, converters=None, parse_dates=None):
     if not os.path.exists(path):
@@ -62,11 +86,13 @@ def safe_load_csv(path, converters=None, parse_dates=None):
         return pd.DataFrame()
     try:
         df = pd.read_csv(path, converters=converters)
-        # Parse dates safely
+        # Drop all-NA columns (common in some exports)
+        df = df.dropna(axis=1, how="all")
         if parse_dates:
             for col in parse_dates:
                 if col in df.columns:
-                    df[col] = pd.to_datetime(df[col], errors='coerce')
+                    # Don't coerce yet, do it later in cleaning
+                    pass
         return df
     except Exception as e:
         logging.error(f"Failed to read {path}: {e}")
@@ -79,10 +105,6 @@ def safe_json_load(x):
         return []
 
 def load_projects():
- # Should start with 'service_role'
-
-    
-    
     path = "data/processed/project_df.csv"
     converters = {
         "topics": safe_json_load,
@@ -94,16 +116,6 @@ def load_projects():
     if df.empty:
         logging.warning("No projects loaded (empty DataFrame)")
         return
-
-    date_map = {
-        "startDate": "start_date",
-        "endDate": "end_date",
-        "ecSignatureDate": "ec_signature_date",
-        "contentUpdateDate": "content_update_date"
-    }
-    for old, new in date_map.items():
-        if old in df.columns:
-            df[old] = pd.to_datetime(df[old], errors='coerce')
 
     rename_map = {
         "startDate": "start_date",
@@ -122,49 +134,64 @@ def load_projects():
     }
     df = df.rename(columns=rename_map)
 
+    # These are all the columns expected in DB (adjust for your DB schema!)
     project_schema = [
         "id", "acronym", "status", "title", "start_date", "end_date",
-        "total_cost", "ec_max_contribution", "ec_signature_date", "frameworkProgramme",
-        "masterCall", "subCall", "fundingScheme", "nature", "objective",
+        "total_cost", "ec_max_contribution", "ec_signature_date", "framework_programme",
+        "master_call", "sub_call", "funding_scheme", "nature", "objective",
         "content_update_date", "rcn", "grant_doi", "duration_days", "duration_months",
         "duration_years", "n_institutions", "coordinator_name",
         "ec_contribution_per_year", "total_cost_per_year"
     ]
+    date_fields = {
+        "start_date", "end_date", "ec_signature_date", "content_update_date"
+    }
     db_cols = [c for c in project_schema if c in df.columns]
     projects = df[db_cols].copy()
-    batch_insert("projects", projects.to_dict(orient="records"))
+    batch_insert("projects", projects.to_dict(orient="records"), date_fields=date_fields)
 
+    org_df = safe_load_csv("data/processed/organization_df.csv")
+    org_name_to_id = dict(zip(org_df["name"], org_df["id"])) if "name" in org_df and "id" in org_df else {}
+
+    # Project topics
     if "topics" in df.columns:
         pt = []
         for _, row in df[["id", "topics"]].explode("topics").iterrows():
             if pd.notnull(row["topics"]) and row["topics"]:
                 pt.append({"project_id": row["id"], "topic_code": row["topics"]})
-        if pt:
-            batch_insert("project_topics", pt)
+        batch_insert("project_topics", pt)
 
     if "legalBasis" in df.columns:
         pl = []
         for _, row in df[["id", "legalBasis"]].explode("legalBasis").iterrows():
             if pd.notnull(row["legalBasis"]) and row["legalBasis"]:
                 pl.append({"project_id": row["id"], "legal_basis_code": row["legalBasis"]})
-        if pl:
-            batch_insert("project_legal_basis", pl)
+        batch_insert("project_legal_basis", pl)
 
     if "sci_voc" in df.columns:
         sv = []
         for _, row in df[["id", "sci_voc"]].explode("sci_voc").iterrows():
             if pd.notnull(row["sci_voc"]) and row["sci_voc"]:
                 sv.append({"project_id": row["id"], "sci_voc_code": row["sci_voc"]})
-        if sv:
-            batch_insert("project_sci_voc", sv)
+        batch_insert("project_sci_voc", sv)
 
+    # Organization linkage, safely convert names if needed
     if "institutions" in df.columns:
         po = []
         for _, row in df[["id", "institutions"]].explode("institutions").iterrows():
-            if pd.notnull(row["institutions"]) and row["institutions"]:
-                po.append({"project_id": row["id"], "organization_id": row["institutions"]})
-        if po:
-            batch_insert("project_organizations", po)
+            org = row["institutions"]
+            org_id = None
+            try:
+                org_id = int(org)
+            except Exception:
+                org_id = org_name_to_id.get(org)
+                try:
+                    org_id = int(org_id)
+                except Exception:
+                    org_id = None
+            if pd.notnull(org_id):
+                po.append({"project_id": row["id"], "organization_id": org_id})
+        batch_insert("project_organizations", po)
 
 def load_topics():
     path = "data/processed/topics_df.csv"
@@ -172,6 +199,14 @@ def load_topics():
     if df.empty: return
     schema = ["code", "title"]
     cols = [c for c in schema if c in df.columns]
+    
+    df = df[cols]
+    before = len(df)
+    df = df[df["code"].notnull() & (df["code"].astype(str).str.strip() != "")]
+    after = len(df)
+    if before != after:
+        logging.warning(f"Removed {before - after} topic rows with empty/null code.")
+
     batch_insert("topics", df[cols].to_dict(orient="records"))
 
 def load_legal_basis():
@@ -180,6 +215,14 @@ def load_legal_basis():
     if df.empty: return
     schema = ["code", "title", "unique_programme_part"]
     cols = [c for c in schema if c in df.columns]
+    
+    df = df[cols]
+    before = len(df)
+    df = df[df["code"].notnull() & (df["code"].astype(str).str.strip() != "")]
+    after = len(df)
+    if before != after:
+        logging.warning(f"Removed {before - after} legal basis rows with empty/null code.")
+    
     batch_insert("legal_basis", df[cols].to_dict(orient="records"))
 
 def load_organizations():
@@ -193,8 +236,17 @@ def load_organizations():
         "street", "post_code", "city", "country", "nuts_code", "geolocation",
         "organization_url", "contact_form", "content_update_date"
     ]
+    date_fields = {"content_update_date"}
     cols = [c for c in schema if c in df.columns]
-    batch_insert("organizations", df[cols].to_dict(orient="records"))
+    
+    df = df[cols]
+    before = len(df)
+    df = df[df["id"].notnull() & (df["id"].astype(str).str.strip() != "")]
+    after = len(df)
+    if before != after:
+        logging.warning(f"Removed {before - after} organization rows with empty/null id.")
+    
+    batch_insert("organizations", df[cols].to_dict(orient="records"), date_fields=date_fields)
 
 def load_deliverables():
     path = "data/interim/data_deliverables.csv"
@@ -206,8 +258,17 @@ def load_deliverables():
         "id", "project_id", "title", "deliverable_type", "description",
         "url", "collection", "content_update_date"
     ]
+    date_fields = {"content_update_date"}
     cols = [c for c in schema if c in df.columns]
-    batch_insert("deliverables", df[cols].to_dict(orient="records"))
+    
+    df = df[cols]
+    before = len(df)
+    df = df[df["id"].notnull() & (df["id"].astype(str).str.strip() != "")]
+    after = len(df)
+    if before != after:
+        logging.warning(f"Removed {before - after} deliverable rows with empty/null id.")
+    
+    batch_insert("deliverables", df[cols].to_dict(orient="records"), date_fields=date_fields)
 
 def load_publications():
     path = "data/interim/data_publications.csv"
@@ -218,8 +279,17 @@ def load_publications():
         "journal_number", "published_year", "published_pages", "issn", "isbn",
         "doi", "collection", "content_update_date"
     ]
+    date_fields = {"content_update_date"}
     cols = [c for c in schema if c in df.columns]
-    batch_insert("publications", df[cols].to_dict(orient="records"))
+    
+    df = df[cols]
+    before = len(df)
+    df = df[df["id"].notnull() & (df["id"].astype(str).str.strip() != "")]
+    after = len(df)
+    if before != after:
+        logging.warning(f"Removed {before - after} publication rows with empty/null id.")
+
+    batch_insert("publications", df[cols].to_dict(orient="records"), date_fields=date_fields)
 
 def load_sci_voc():
     path = "data/processed/sci_voc_df.csv"
@@ -227,6 +297,14 @@ def load_sci_voc():
     if df.empty: return
     schema = ["code", "path", "title", "description"]
     cols = [c for c in schema if c in df.columns]
+
+    before = len(df)
+    df = df[df["code"].notnull() & (df["code"].astype(str).str.strip() != "")]
+    after = len(df)
+    if before != after:
+        logging.warning(f"Removed {before - after} sci_voc rows with empty/null code.")
+
+
     batch_insert("sci_voc", df[cols].to_dict(orient="records"))
 
 def load_web_items():
@@ -238,6 +316,14 @@ def load_web_items():
         "language", "available_languages", "uri", "title", "type", "source", "represents"
     ]
     cols = [c for c in schema if c in df.columns]
+
+    df = df[cols]
+    before = len(df)
+    df = df[df["language"].notnull() & (df["language"].astype(str).str.strip() != "")]
+    after = len(df)
+    if before != after:
+        logging.warning(f"Removed {before - after} web item rows with empty/null language.")
+
     batch_insert("web_items", df[cols].to_dict(orient="records"))
 
 def load_web_links():
@@ -251,8 +337,19 @@ def load_web_links():
         "id", "project_id", "phys_url", "available_languages", "status", "archived_date",
         "type", "source", "represents"
     ]
+    date_fields = {"archived_date"}
     cols = [c for c in schema if c in df.columns]
-    batch_insert("web_links", df[cols].to_dict(orient="records"))
+    
+    
+    df = df[cols]
+    before = len(df)
+    df = df[df["id"].notnull() & (df["id"].astype(str).str.strip() != "")]
+    after = len(df)
+    if before != after:
+        logging.warning(f"Removed {before - after} web link rows with empty/null id.")
+        
+    
+    batch_insert("web_links", df[cols].to_dict(orient="records"), date_fields=date_fields)
 
 def main():
     load_projects()
