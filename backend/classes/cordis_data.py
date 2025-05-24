@@ -336,7 +336,7 @@ class CORDIS_data():
         return acronyms
     
     def extract_scientific_fields(self):
-        paths = self.sci_voc_df['euroSciVocPath'].dropna().unique()
+        paths = self.sci_voc_df['path'].dropna().unique()
         fields = set()
         for path in paths:
             segments = path.strip('/').split('/')

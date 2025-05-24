@@ -63,135 +63,137 @@ class CORDISPlots:
             title="Distribution of EC Funding per Project"
         )
 
+
     def plot_collaboration_network(self, 
                                    field_filter=None, 
-                                   org_types = None, 
+                                   org_types=None, 
                                    max_projects=1000, 
                                    min_participants=2, 
                                    countries=None,
-                                   disciplines=None,
                                    year=None,
-                                   contribution=None,
                                    project_type=None):
-        '''
-        Function to plot the collaboration network of institutions involved in projects
-        Parameters:
-        -----------------
-        - field_filter: Optional filter for scientific field
-        - max_projects: Maximum number of projects to include in the plot, to avoid cluttering 
-            (default: 1000, which is still too much)
-        - min_participants: minimum of participating institutions in a=project to be included. 
-            (default: 2, which is the minimum for a collaboration)
-        - org_types: List of organization types to include in the plot.
-            (default: ['HES', 'REC', 'PUB', 'PRC', 'SME']) => all types
-        - countries: list of counntries of which we include institutions in the plot.
-            default: None, which means all countries are included.
+        """
+        Plot institution collaboration network.
+        Now uses project_organizations + organizations + project_df with your actual columns:
+          - project_df has: id, field (list), funding_scheme, start_date, etc.
+          - project_organizations has: project_id, organization_id
+          - organizations has: id, name, activity_type, country
+        """
+        # 1) load and rename for clarity
+        df_proj = self.data.project_df.copy()
+        df_proj = df_proj.rename(columns={'id':'project_id'})
+        
+        df_rel = self.data.project_organizations.copy()
+        df_org = self.data.organization_df.copy()
+        
+        # 2) merge join‐table + metadata
+        df_join = (
+            df_rel
+            .merge(df_org[['id','name','activity_type','country']],
+                   left_on='organization_id', right_on='id',
+                   suffixes=('','_org'))
+            .rename(columns={'name':'institution','activity_type':'org_type'})
+        )
 
-        Returns:
-        -----------------   
-        - Plotly figure object
-        '''
-        df_proj = self.data.project_df
-        df_org = self.data.organization_df
-        # Filter for relevant organization types
-        if org_types is None:
-            org_types = ['HES', 'REC', 'PUB', 'PRC', 'SME']
-        else:
-            assert type(org_types) == list or type(org_types) == np.array
-
-        # Apply scientific field filter if provided
+        # 3) filter projects by thematic field
         if field_filter:
-            # Filter projects based on scientific field
-            df_proj = df_proj[df_proj['sci_voc_titles'].apply(lambda field: field_filter in field if isinstance(field, str) else False)]
-            project_ids = df_proj['projectID'].unique()
-            df_org = df_org[df_org['projectID'].isin(project_ids)]
-            
-        if org_types:
-            df_org =df_org[df_org['activityType'].astype(str).isin(org_types)]
+            df_proj = df_proj[
+                df_proj['field'].apply(lambda L: field_filter in L if isinstance(L, list) else False)
+            ]
 
-        if countries:
-            df_org = df_org[df_org['country'].astype(str).isin(countries)]
-
-        if disciplines:
-            for discipline in disciplines:
-                df_org = df_org[df_org['discipline'].astype(str).str.contains(discipline, na=False)]
-
-        if year:
-            df_org = df_org[df_org['startDate'].astype(str).str.contains(year, na=False)]
-
-        if contribution:
-            df_org = df_org[df_org['contribution'].astype(float) >= contribution]
-   
+        # 4) filter projects by type (HORIZON calls)
         if project_type:
-            for call in project_type:
-                
-                df_org = df_org[df_org['fundingScheme'].astype(str).str.contains(call, na=False)]
+            df_proj = df_proj[
+                df_proj['funding_scheme'].astype(str).isin(project_type)
+            ]
 
-        df_org = df_org[['projectID', 'name']].drop_duplicates()
+        # 5) filter by year (start_date is a datetime)
+        if year:
+            df_proj = df_proj[
+                pd.to_datetime(df_proj['start_date'], errors='coerce').dt.year == int(year)
+            ]
+        
+        # 6) now restrict the join‐table to only those projects
+        df_join = df_join[df_join['project_id'].isin(df_proj['project_id'])]
 
-        # Group by project and filter based on number of participants
-        collab_df = df_org.groupby('projectID')['name'].apply(list).reset_index()
-        collab_df = collab_df[collab_df['name'].apply(lambda x: len(x) >= min_participants)]
+        # 7) filter by organization types
+        if org_types:
+            df_join = df_join[df_join['org_type'].astype(str).isin(org_types)]
+
+        # 8) filter by country
+        if countries:
+            df_join = df_join[df_join['country'].astype(str).isin(countries)]
+
+        #  9) build list of participants per project
+        collab_df = (
+            df_join
+            .groupby('project_id')
+            .agg({'institution': lambda names: list(set(names))})
+            .reset_index()
+        )
+        # make sure our list‐column is called “institutions”
+        collab_df = collab_df.rename(columns={'institution':'institutions'})
+
+        # 10) drop small collaborations
+        collab_df['n_inst'] = collab_df['institutions'].apply(len)
+        collab_df = collab_df[collab_df['n_inst'] >= min_participants]
+
+        # 11) limit to max_projects
         collab_df = collab_df.head(max_projects)
 
+        # now collab_df definitely has an “institutions” column
         from itertools import combinations
         from collections import Counter
+        edges = Counter()
+        for insts in collab_df['institutions']:
+            edges.update(combinations(insts, 2))
 
-        # Build edge list
-        edge_list = []
-        for names in collab_df['name']:
-            edge_list.extend(combinations(names, 2))
-        edge_counts = Counter(edge_list)
 
+        # 12) build graph
         G = nx.Graph()
-        for (u, v), weight in edge_counts.items():
-            G.add_edge(u, v, weight=weight)
+        for (u,v), w in edges.items():
+            G.add_edge(u, v, weight=w)
 
         pos = nx.spring_layout(G, k=0.15, iterations=20)
 
+        # 13) edge traces
         edge_x, edge_y = [], []
-        for edge in G.edges():
-            x0, y0 = pos[edge[0]]
-            x1, y1 = pos[edge[1]]
+        for u,v in G.edges():
+            x0,y0 = pos[u]; x1,y1 = pos[v]
             edge_x += [x0, x1, None]
             edge_y += [y0, y1, None]
-
         edge_trace = go.Scatter(
             x=edge_x, y=edge_y,
-            line=dict(width=0.5, color='#888'),
-            hoverinfo='none',
-            mode='lines')
+            mode='lines',
+            line=dict(width=0.5,color='#888'),
+            hoverinfo='none'
+        )
 
+        # 14) node traces
         node_x, node_y, node_text = [], [], []
         for node in G.nodes():
-            x, y = pos[node]
-            node_x.append(x)
-            node_y.append(y)
+            x,y = pos[node]
+            node_x.append(x); node_y.append(y)
             node_text.append(node)
-
         node_trace = go.Scatter(
-            x=node_x, y=node_y,
-            mode='markers+text',
-            text=node_text,
-            textposition='top center',
-            marker=dict(
-                showscale=False,
-                color='blue',
-                size=10,
-                line_width=2))
-        if field_filter:
-            title = f'Institution Collaboration Network for {field_filter}'
-        else:
-            title = 'Institution Collaboration Network'
-        fig = go.Figure(data=[edge_trace, node_trace],
-                        layout=go.Layout(
-                            title=title,
-                            showlegend=False,
-                            hovermode='closest',
-                            margin=dict(b=20, l=5, r=5, t=40),
-                            xaxis=dict(showgrid=False, zeroline=False),
-                            yaxis=dict(showgrid=False, zeroline=False)))
+            x=node_x, y=node_y, mode='markers+text',
+            text=node_text, textposition='top center',
+            marker=dict(size=10, line_width=2, color='blue')
+        )
 
+        title = (f'Collaboration Network for "{field_filter}"'
+                 if field_filter else 'Institution Collaboration Network')
+        fig = go.Figure(
+            data=[edge_trace, node_trace],
+            layout=go.Layout(
+                title=title,
+                showlegend=False,
+                hovermode='closest',
+                margin=dict(b=20,l=5,r=5,t=40),
+                xaxis=dict(showgrid=False,zeroline=False),
+                yaxis=dict(showgrid=False,zeroline=False)
+            )
+        )
         return fig
 
     def plot_funding_over_time_by_field(self):
