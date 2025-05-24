@@ -17,73 +17,66 @@ from backend.etl.ingestion import inspect_bad_lines, auto_fix_row, robust_csv_re
 
 class CORDIS_data():
     def __init__(self, parent_dir, enrich=True):
-        '''
-        Initialize class: load data from the CSV files
+        """
+        Load either raw+run enrichments (enrich=True) or straight processed CSVs (enrich=False).
+        """
+        self.parent_dir    = parent_dir
+        self.raw_dir       = os.path.join(parent_dir, "data", "raw")
+        self.interim_dir   = os.path.join(parent_dir, "data", "interim")
+        self.processed_dir = os.path.join(parent_dir, "data", "processed")
 
-        set some global variables that we 
-        enrich (bool): if True, run the enrchment feautures. If False, load the processed data
+        # paths for raw
+        project_path      = os.path.join(self.raw_dir, "project.csv")
+        SciVoc_path       = os.path.join(self.raw_dir, "euroSciVoc.csv")
+        legalBasis_path   = os.path.join(self.raw_dir, "legalBasis.csv")
+        organization_path = os.path.join(self.raw_dir, "organization.csv")
+        topics_path       = os.path.join(self.raw_dir, "topics.csv")
+        webItems_path     = os.path.join(self.raw_dir, "webItem.csv")
+        webLink_path      = os.path.join(self.raw_dir, "webLink.csv")
 
-        Parameters:
-        - parent_dir: should be path to EU_Dashboard repo. From here on paths are specified
-        - enrich: if True, run the enrichment features. If False, load the processed data
-
-        '''
-        self.parent_dir = parent_dir
-        self.raw_dir = f'{parent_dir}/data/raw'
-        self.interim_dir = f'{parent_dir}/data/interim'
-        self.processed_dir = f'{parent_dir}/data/processed'
-
-        # define some file paths
-        SciVoc_path = f'{self.raw_dir}/euroSciVoc.csv'
-        legalBasis_path = f'{self.raw_dir}/legalBasis.csv'
-        organization_path = f'{self.raw_dir}/organization.csv'
-        project_path = f'{self.raw_dir}/project.csv'
-        topics_path = f'{self.raw_dir}/topics.csv'
-        webItems_path = f'{self.raw_dir}/webItem.csv'
-        webLink_path = f'{self.raw_dir}/webLink.csv'
-
-        # Load all datasets and set as class attributes
-        #self.data_report = pd.read_csv(f'{self.interim_dir}/project_interim.csv', delimiter=';')
-        self.data_deliverables = pd.read_csv(f'{self.interim_dir}/projectDeliverables_interim.csv', delimiter=';')
-        self.data_publications = pd.read_csv(f'{self.interim_dir}/projectPublications_interim.csv', delimiter=';')
-        self.project_df = pd.read_csv(f'{self.interim_dir}/project_interim.csv', delimiter=';')
-        self.sci_voc_df = pd.read_csv(SciVoc_path, delimiter=';')
-        self.legal_basis_df = pd.read_csv(legalBasis_path, delimiter=';')   
-        self.organization_df = pd.read_csv(organization_path, delimiter=';')
-        self.topics_df = pd.read_csv(topics_path, delimiter=';')
-        self.web_items_df = pd.read_csv(webItems_path, delimiter=';')
-        self.web_link_df = pd.read_csv(webLink_path, delimiter=';')
-
-        self.project_df = robust_csv_reader(project_path, delimiter=';')
         if enrich:
-            # enrich the project DataFrame with some additional information
-            # Call enrichment functions
+            # — load and enrich from raw/interim
+            self.data_deliverables   = pd.read_csv(os.path.join(self.interim_dir, "projectDeliverables_interim.csv"), delimiter=";")
+            self.data_publications   = pd.read_csv(os.path.join(self.interim_dir, "projectPublications_interim.csv"), delimiter=";")
+            # robust load of project
+            self.project_df          = robust_csv_reader(project_path, delimiter=";")
+            self.organization_df     = pd.read_csv(organization_path, delimiter=";")
+            self.topics_df           = pd.read_csv(topics_path, delimiter=";")
+            self.legal_basis_df      = pd.read_csv(legalBasis_path, delimiter=";")
+            self.sci_voc_df          = pd.read_csv(SciVoc_path, delimiter=";")
+            self.web_items_df        = pd.read_csv(webItems_path, delimiter=";")
+            self.web_link_df         = pd.read_csv(webLink_path, delimiter=";")
+
+            # run your enrichment pipeline
             self._enrich_temporal_features()
             self._enrich_people_and_institutions()
             self._enrich_financial_metrics()
             self._enrich_scientific_thematic()
         else:
+            # — straight load from processed_dir
             P = self.processed_dir
             # core
-            self.project_df         = pd.read_csv(f'{P}/projects.csv')
-            self.data_deliverables  = pd.read_csv(f'{P}/deliverables.csv')
-            self.data_publications  = pd.read_csv(f'{P}/publications.csv')
+            self.project_df              = pd.read_csv(os.path.join(P, "projects.csv"))
+            self.data_deliverables       = pd.read_csv(os.path.join(P, "deliverables.csv"))
+            self.data_publications       = pd.read_csv(os.path.join(P, "publications.csv"))
             # dimensions
-            self.organization_df    = pd.read_csv(f'{P}/organizations.csv')
-            self.topics_df          = pd.read_csv(f'{P}/topics.csv')
-            self.legal_basis_df     = pd.read_csv(f'{P}/legal_basis.csv')
-            self.sci_voc_df         = pd.read_csv(f'{P}/sci_voc.csv')
-            # joins
-            self.project_organizations = pd.read_csv(f'{P}/project_organizations.csv')
-            self.project_topics        = pd.read_csv(f'{P}/project_topics.csv')
-            self.project_legal_basis   = pd.read_csv(f'{P}/project_legal_basis.csv')
-            self.project_sci_voc       = pd.read_csv(f'{P}/project_sci_voc.csv')
-            self.web_items_df       = pd.read_csv(f'{P}/web_items.csv')
-            self.web_link_df        = pd.read_csv(f'{P}/web_links.csv')
-            
+            self.organization_df         = pd.read_csv(os.path.join(P, "organizations.csv"))
+            self.topics_df               = pd.read_csv(os.path.join(P, "topics.csv"))
+            self.legal_basis_df          = pd.read_csv(os.path.join(P, "legal_basis.csv"))
+            self.sci_voc_df              = pd.read_csv(os.path.join(P, "sci_voc.csv"))
+            # join tables
+            self.project_organizations   = pd.read_csv(os.path.join(P, "project_organizations.csv"))
+            self.project_topics          = pd.read_csv(os.path.join(P, "project_topics.csv"))
+            self.project_legal_basis     = pd.read_csv(os.path.join(P, "project_legal_basis.csv"))
+            self.project_sci_voc         = pd.read_csv(os.path.join(P, "project_sci_voc.csv"))
+            self.web_items_df            = pd.read_csv(os.path.join(P, "web_items.csv"))
+            self.web_link_df             = pd.read_csv(os.path.join(P, "web_links.csv"))
 
-        # Extract possible scientific fields
-        self.scientific_fields = self.extract_scientific_fields(enrich=enrich)
+        # finally compute the available scientific field list
+        self.scientific_fields = self.extract_scientific_fields()
+        
+    # —————————————————————————————————————————————————————————————————————————————
+    # public methods
     
     def list_of_acronyms(self, show=True):
         '''
@@ -308,48 +301,71 @@ class CORDIS_data():
         print(", ".join(df.columns))
         print("==========================================================")
 
+    # —————————————————————————————————————————————————————————————————————————————
+    # your enrichment methods remain unchanged …
+    # _enrich_temporal_features, _enrich_people_and_institutions,
+    # _enrich_financial_metrics, _enrich_scientific_thematic
+    # —————————————————————————————————————————————————————————————————————————————
+
+
     def get_projects_by_scientific_field(self):
         """
-        Get a list of all projects filtered by the scientific field. 
+        Returns a dict: { top_level_field : [ project_acronym, … ], … }
+        based on the processed project_sci_voc + sci_voc tables.
         """
-        # initialize empty dictionary with list in which we store project acronyms
-        projects_per_field = {}
-        for field in self.scientific_fields:
-            projects_per_field[str(field)] = []
+        # merge project_sci_voc → sci_voc to get each project's path
+        df = (
+            self.project_sci_voc
+              .merge(self.sci_voc_df[["code","path"]],
+                     left_on="sci_voc_code", right_on="code",
+                     how="left")
+        )
+        # extract top‐level category before the first "/"
+        df["top_field"] = df["path"].fillna("").apply(lambda p: p.strip("/").split("/")[0] if p else "other")
 
-        # Go through  sciVoc dataframe and add acronym to the list
-        for i in range(len(self.sci_voc_df)):
-            for field in self.scientific_fields:
-                if field in self.sci_voc_df['euroSciVocPath'][i]:
-                    project_id = self.sci_voc_df['projectID'][i]
-                    acronym = self.project_df[self.project_df['id'] == project_id]['acronym'].values[0]
-                    projects_per_field[field].append(acronym)
-                
-        # Remove duplicates
-        for field in self.scientific_fields:
-            projects_per_field[field] = list(set(projects_per_field[field]))
-        return projects_per_field
+        # map back to acronyms
+        result = {}
+        for fld, group in df.groupby("top_field"):
+            pids = group["project_id"].astype(str).unique()
+            acronyms = (
+                self.project_df[self.project_df["id"].astype(str).isin(pids)]["acronym"]
+                .dropna().unique().tolist()
+            )
+            result[fld] = acronyms
+        return result
+
 
     def get_projects_by_institution(self, institution_keyword):
-        filtered = self.organization_df[self.organization_df['name'].str.contains(institution_keyword, case=False, na=False)]
-        acronyms = filtered['projectAcronym'].dropna().unique().tolist()
+        """
+        Returns list of project acronyms for institutions whose name matches keyword.
+        """
+        # find matching org IDs
+        mask = self.organization_df["name"].str.contains(institution_keyword, case=False, na=False)
+        org_ids = self.organization_df.loc[mask, "id"].unique()
+        # find join rows
+        pid = (
+            self.project_organizations
+              .loc[self.project_organizations["organization_id"].isin(org_ids), "project_id"]
+              .astype(str)
+        )
+        acronyms = (
+            self.project_df[self.project_df["id"].astype(str).isin(pid)]
+              ["acronym"]
+              .dropna()
+              .unique()
+              .tolist()
+        )
         return acronyms
-    
-    def extract_scientific_fields(self, enrich):
-        print("Extracting scientific fields from euroSciVoc paths...")
-        # print sci_voc_df columns
-        print(f"  - Columns: {', '.join(self.sci_voc_df.columns)}")
-        # Extract unique first segments from euroSciVocPath
-        if 'euroSciVocPath' not in self.sci_voc_df.columns:
-            paths = self.sci_voc_df['path'].dropna().unique()
-            
-        paths = self.sci_voc_df['euroSciVocPath'].dropna().unique()
-        fields = set()
-        for path in paths:
-            segments = path.strip('/').split('/')
-            if segments:
-                fields.add(segments[0])
-        return sorted(fields)
+
+
+    def extract_scientific_fields(self):
+        """
+        Returns all distinct top‐level fields from sci_voc_df.path
+        """
+        col = "path" if "path" in self.sci_voc_df.columns else "euroSciVocPath"
+        vals = self.sci_voc_df[col].dropna().unique()
+        top_levels = set(v.strip("/").split("/")[0] for v in vals if isinstance(v, str) and "/" in v)
+        return sorted(top_levels)
     
     
     def export_raw(self, directory, include_all=False):

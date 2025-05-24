@@ -197,29 +197,54 @@ class CORDISPlots:
         return fig
 
     def plot_funding_over_time_by_field(self):
-        '''
-        Function that returns figure with the total yearly amount of money allocated to high-level scientific fields
-        '''
+        """
+        Returns a line plot of total EC funding per year, broken out
+        by top‐level scientific field (from field_class).
+        """
         df = self.data.project_df.copy()
-
-        if 'startDate' not in df.columns or 'sci_voc_paths' not in df.columns:
-            raise KeyError("Required columns 'startDate' and 'sci_voc_paths' not found in project_df.")
-
-        df = df.dropna(subset=['startDate', 'sci_voc_paths'])
         
-        # Get starting year of project
-        df['startDate'] = pd.to_datetime(df['startDate'], errors='coerce')
-        df['year'] = df['startDate'].dt.year
+        # print debug info on coluns
+        print("Available columns in project_df:", df.columns.tolist())
 
-        # Split paths to extract top-level category (e.g., "/natural sciences/...")
-        df['top_field'] = df['sci_voc_paths'].apply(lambda x: x[0].split('/')[1] if isinstance(x[0], str) and '/' in x[0] else 'Unknown')
-        df_grouped = df.groupby(['year', 'top_field'])['ecMaxContribution'].sum().reset_index()
+        # ---- guard against missing columns in processed data ----
+        if 'start_date' not in df.columns or 'field_class' not in df.columns:
+            raise KeyError(
+                "Required columns 'start_date' and 'field_class' not found in project_df. "
+                "Make sure you loaded the processed projects.csv which includes those."
+            )
 
-        
-        fig = px.line(df_grouped, x='year', y='ecMaxContribution', color='top_field',
-                    title='Funding Over Time per Scientific Field',
-                    labels={'ecMaxContribution': 'Funding (EUR)', 'year': 'Year', 'top_field': 'Scientific Field'})
+        # ---- prepare years ----
+        df['start_date'] = pd.to_datetime(df['start_date'], errors='coerce')
+        df = df.dropna(subset=['start_date'])
+
+        # Extract year
+        df['year'] = df['start_date'].dt.year
+
+        # Each project can live in multiple top‐level fields → explode
+        df = df.explode('field_class')
+
+        # Sum ec_max_contribution by year + field_class
+        df_grouped = (
+            df
+            .groupby(['year', 'field_class'], as_index=False)['ec_max_contribution']
+            .sum()
+        )
+
+        # Finally plot
+        fig = px.line(
+            df_grouped,
+            x='year',
+            y='ec_max_contribution',
+            color='field_class',
+            title='Funding Over Time per Scientific Field',
+            labels={
+                'ec_max_contribution': 'Funding (EUR)',
+                'year': 'Year',
+                'field_class': 'Scientific Field'
+            }
+        )
         return fig
+
     
     def plot_funding_per_country_choropleth(self):
         '''
