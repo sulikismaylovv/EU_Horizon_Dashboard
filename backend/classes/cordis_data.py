@@ -83,7 +83,7 @@ class CORDIS_data():
             
 
         # Extract possible scientific fields
-        self.scientific_fields = self.extract_scientific_fields()
+        self.scientific_fields = self.extract_scientific_fields(enrich=enrich)
     
     def list_of_acronyms(self, show=True):
         '''
@@ -335,8 +335,15 @@ class CORDIS_data():
         acronyms = filtered['projectAcronym'].dropna().unique().tolist()
         return acronyms
     
-    def extract_scientific_fields(self):
-        paths = self.sci_voc_df['path'].dropna().unique()
+    def extract_scientific_fields(self, enrich):
+        print("Extracting scientific fields from euroSciVoc paths...")
+        # print sci_voc_df columns
+        print(f"  - Columns: {', '.join(self.sci_voc_df.columns)}")
+        # Extract unique first segments from euroSciVocPath
+        if 'euroSciVocPath' not in self.sci_voc_df.columns:
+            paths = self.sci_voc_df['path'].dropna().unique()
+            
+        paths = self.sci_voc_df['euroSciVocPath'].dropna().unique()
         fields = set()
         for path in paths:
             segments = path.strip('/').split('/')
