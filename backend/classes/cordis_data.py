@@ -76,7 +76,6 @@ class CORDIS_data():
         self.scientific_fields = self.extract_scientific_fields()
         
     # —————————————————————————————————————————————————————————————————————————————
-    # public methods
     
     def list_of_acronyms(self, show=True):
         '''
@@ -384,242 +383,224 @@ class CORDIS_data():
             self.web_items_df.to_csv(os.path.join(directory, 'web_items_df.csv'), index=False)
             self.web_link_df.to_csv(os.path.join(directory, 'web_link_df.csv'), index=False)
 
-import plotly.express as px
-import plotly.graph_objects as go
-import networkx as nx
-import pandas as pd
-import pycountry
-from itertools import combinations
-from collections import Counter
+    def export_to_db_schema(self, directory):
+        """
+        Export all enriched tables to match the final database schema.
+        Produces CSVs:
+        - projects.csv
+        - topics.csv
+        - project_topics.csv
+        - legal_basis.csv
+        - project_legal_basis.csv
+        - organizations.csv
+        - project_organizations.csv
+        - deliverables.csv
+        - publications.csv
+        - sci_voc.csv
+        - project_sci_voc.csv
+        - web_items.csv
+        - web_links.csv
+        """
+        out = directory
+        os.makedirs(out, exist_ok=True)
+
+        # 1) projects
+        proj = self.project_df.copy()
+        print("Exporting projects to CSV...")
+        print(f"  - {len(proj)} projects found")
+        #print columns of the project dataframe
+        print(f"  - Columns: {', '.join(proj.columns)}")
+        proj = proj.rename(columns={
+            'startDate': 'start_date',
+            'endDate': 'end_date',
+            'totalCost': 'total_cost',
+            'ecMaxContribution': 'ec_max_contribution',
+            'ecSignatureDate': 'ec_signature_date',
+            'contentUpdateDate': 'content_update_date',
+            'grantDoi': 'grant_doi',
+            'frameworkProgramme': 'framework_programme',
+            'masterCall': 'master_call',
+            'subCall': 'sub_call',
+            'fundingScheme': 'funding_scheme',
+            'nature': 'nature',
+            'objective': 'objective',
+            'rcn': 'rcn',
+            'grantDoi': 'grant_doi',
+            'ecContribution_per_year': 'ec_contribution_per_year',
+            'totalCost_per_year': 'total_cost_per_year',
+            'subfield' : 'sub_field',
+            
+        })
+        keep = [
+            'id', 'acronym', 'status', 'title',
+            'start_date', 'end_date', 'total_cost', 'ec_max_contribution', 'ec_signature_date',
+            'framework_programme', 'master_call', 'sub_call', 'funding_scheme', 'nature', 'objective', 'content_update_date',
+            'rcn', 'grant_doi',
+            'duration_days', 'duration_months', 'duration_years',
+            'n_institutions', 'coordinator_name',
+            'ec_contribution_per_year', 'total_cost_per_year',
+            'field_class', 'field', 'sub_field', 'niche',
+        ]
+        proj[keep].to_csv(os.path.join(out, 'projects.csv'), index=False)
+
+        # 2) topics & project_topics
+        topics = self.topics_df.rename(columns={'projectID':'project_id', 'topic':'code'})
+        dim_topics = topics[['code','title']].drop_duplicates()
+        dim_topics.to_csv(os.path.join(out, 'topics.csv'), index=False)
+        proj_topics = topics[['project_id','code']].drop_duplicates()
+        # rename code to topic_code
+        proj_topics = proj_topics.rename(columns={'code':'topic_code'})
+        proj_topics.to_csv(os.path.join(out, 'project_topics.csv'), index=False)
+
+        # 3) legal_basis & project_legal_basis
+        lb = self.legal_basis_df.rename(columns={'projectID':'project_id','legalBasis':'code'})
+        dim_lb = lb[['code','title','uniqueProgrammePart']].drop_duplicates()
+        # rename uniqueProgrammePart to unique_programme_part
+        dim_lb = dim_lb.rename(columns={'uniqueProgrammePart':'unique_programme_part'})
+        
+        dim_lb.to_csv(os.path.join(out, 'legal_basis.csv'), index=False)
+        
+        
+        proj_lb = lb[['project_id','code']].drop_duplicates()
+        # rename code to legal_basis_code
+        proj_lb = proj_lb.rename(columns={'code':'legal_basis_code'})
+        proj_lb.to_csv(os.path.join(out, 'project_legal_basis.csv'), index=False)
+
+        # 4) organizations & project_organizations
+        print("Exporting organizations and project_organizations to CSV...")
+        print(f"  - {len(self.organization_df)} organizations found")
+        print(f"  - Columns: {', '.join(self.organization_df.columns)}")
+        
+        # 4) organizations & project_organizations
+        org = self.organization_df.rename(columns={
+            'organisationID':'id',
+            'projectID':'project_id',
+            'SME':'sme',
+            'shortName':'short_name',
+            'vatNumber':'vat_number',
+            'activityType':'activity_type',
+            'street':'street',
+            'postCode':'post_code',
+            'city':'city',
+            'country':'country',
+            'nutsCode':'nuts_code',
+            'geolocation':'geolocation',
+            'organizationURL':'organization_url',
+            'contactForm':'contact_form',
+            'contentUpdateDate':'content_update_date',
+            'grantDoi':'grant_doi',
+        })
+        dim_org = org[['id','name','short_name','vat_number','sme','activity_type',
+                       'street','post_code','city','country','nuts_code','geolocation',
+                       'organization_url','contact_form','content_update_date']].drop_duplicates()
+        dim_org.to_csv(os.path.join(out, 'organizations.csv'), index=False)
+
+        proj_org = org.rename(columns={
+            'order':'order_index',
+            'ecContribution':'ec_contribution',
+            'netEcContribution':'net_ec_contribution',
+            'totalCost':'total_cost',
+            'endOfParticipation':'end_of_participation'
+        })
+        link_cols = ['project_id','id','role','order_index','ec_contribution','net_ec_contribution',
+                     'total_cost','end_of_participation','active']
+        proj_org = proj_org[link_cols].rename(columns={'id':'organization_id'})
+        proj_org.to_csv(os.path.join(out, 'project_organizations.csv'), index=False)
+        
+        
+        
+        # 5) deliverables
+        print("Exporting deliverables to CSV...")
+        print(f"  - {len(self.data_deliverables)} deliverables found")
+        print(f"  - Columns: {', '.join(self.data_deliverables.columns)}")
+        # Rename columns and select relevant ones
+        
+        
+        deliv = self.data_deliverables.rename(columns={
+            'projectID':'project_id',
+            'deliverableID':'id',
+            'deliverableType':'deliverable_type',
+            'contentUpdateDate':'content_update_date',
+            'contentupdatedate':'content_update_date'
+        })
+        deliv_cols = ['id','project_id','title','deliverable_type','description','url','collection','content_update_date']
+        deliv[deliv_cols].to_csv(os.path.join(out, 'deliverables.csv'), index=False)
 
 
-class CORDISPlots:
-    """
-    Plotly-based visualizations over your processed Horizon CSVs.
 
-    Assumes you've loaded, in your CORDIS_data __init__:
-      • self.project_df           ← projects.csv
-      • self.organization_df      ← organizations.csv
-      • self.project_organizations← project_organizations.csv
-      • (and the other dims if needed)
-    """
+        # 6) publications
+        pubs = self.data_publications.rename(columns={
+            'projectID':'project_id','publicationID':'id','isPublishedAs':'is_published_as',
+            'journalTitle':'journal_title','journalNumber':'journal_number',
+            'publishedYear':'published_year','publishedPages':'published_pages',
+            'contentUpdateDate':'content_update_date'
+        })
+        pub_cols = ['id','project_id','title','is_published_as','authors','journal_title','journal_number',
+                    'published_year','published_pages','issn','isbn','doi','collection','content_update_date']
+        pubs[pub_cols].to_csv(os.path.join(out, 'publications.csv'), index=False)
 
-    def __init__(self, cordis_data):
-        self.data = cordis_data
+        # 7) sci_voc & project_sci_voc
+        sci = self.sci_voc_df.rename(columns={
+            'euroSciVocCode':'code','euroSciVocPath':'path',
+            'euroSciVocTitle':'title','euroSciVocDescription':'description'
+        })
+        dim_sci = sci[['code','path','title','description']].drop_duplicates()
+        dim_sci.to_csv(os.path.join(out, 'sci_voc.csv'), index=False)
+        proj_sci = sci.rename(columns={'projectID':'project_id'})[['project_id','code']].drop_duplicates()
+        # rename code to sci_voc_code
+        proj_sci = proj_sci.rename(columns={'code':'sci_voc_code'})
+        proj_sci.to_csv(os.path.join(out, 'project_sci_voc.csv'), index=False)
 
-    def ec_contribution_by_country(self):
-        # join project_organizations → organizations to get country + ec_contribution
-        df = (
-            self.data.project_organizations
-              .merge(
-                  self.data.organization_df[['id','country']],
-                  left_on='organization_id',
-                  right_on='id',
-                  how='left'
-              )
-              .groupby('country', as_index=False)['ec_contribution']
-              .sum()
-              .sort_values('ec_contribution', ascending=False)
-        )
-        return px.bar(
-            df,
-            x='country',
-            y='ec_contribution',
-            title='Total EC Contribution by Country',
-            labels={'ec_contribution':'EC Contribution (EUR)'}
-        )
+        # 8) web_items
+        print("Exporting web items to CSV...")
+        print(f"  - {len(self.web_items_df)} web items found")
+        print(f"  - Columns: {', '.join(self.web_items_df.columns)}")
+        # Rename columns and select relevant ones
+        wi = self.web_items_df.rename(columns={'represents':'project_id','availableLanguages':'available_languages'})
+        wi[['language','available_languages','uri','title','type','source','project_id']].to_csv(os.path.join(out, 'web_items.csv'), index=False)
 
-    def projects_per_country(self):
-        # count distinct projects per country via project_organizations → organizations
-        df = (
-            self.data.project_organizations
-              .merge(
-                  self.data.organization_df[['id','country']],
-                  left_on='organization_id',
-                  right_on='id',
-                  how='left'
-              )
-              .groupby('country', as_index=False)['project_id']
-              .nunique()
-              .rename(columns={'project_id':'project_count'})
-              .sort_values('project_count', ascending=False)
-        )
-        return px.bar(
-            df,
-            x='country',
-            y='project_count',
-            title='Number of Projects per Country'
-        )
+        # 9) web_links
+        print("Exporting web links to CSV...")
+        print(f"  - {len(self.web_link_df)} web links found")
+        print(f"  - Columns: {', '.join(self.web_link_df.columns)}")
+        wl = self.web_link_df.rename(columns={
+            'projectID':'project_id',
+            'physUrl':'phys_url',
+            'availableLanguages':'available_languages',
+            'archivedDate':'archived_date'
+        })
+        web_link_cols = ['id','project_id','phys_url','available_languages','status','archived_date','type','source','represents']
+        wl[web_link_cols].to_csv(os.path.join(out, 'web_links.csv'), index=False)
 
-    def top_institutions_by_funding(self, top_n=15):
-        # sum ec_contribution per institution name
-        df = (
-            self.data.project_organizations
-              .merge(
-                  self.data.organization_df[['id','name']],
-                  left_on='organization_id',
-                  right_on='id',
-                  how='left'
-              )
-              .groupby('name', as_index=False)['ec_contribution']
-              .sum()
-              .sort_values('ec_contribution', ascending=False)
-              .head(top_n)
-        )
-        return px.bar(
-            df,
-            x='name',
-            y='ec_contribution',
-            title=f'Top {top_n} Institutions by EC Contribution',
-            labels={'ec_contribution':'EC Contribution (EUR)', 'name':'Institution'}
-        )
+        print(f"✅ All tables exported to {out}")
 
-    def funding_distribution_per_project(self):
-        return px.histogram(
-            self.data.project_df,
-            x='ec_max_contribution',
-            nbins=20,
-            title='Distribution of EC Funding per Project',
-            labels={'ec_max_contribution':'EC Funding (EUR)'}
-        )
+    def export_dataframes(self, directory, format='csv', include_all=False):
+        """
+        Export enriched project_df and optionally all loaded dataframes.
 
-    def plot_collaboration_network(
-        self,
-        field_filter=None,
-        org_types=None,
-        max_projects=1000,
-        min_participants=2,
-        countries=None,
-        year=None,
-        project_type=None
-    ):
-        # 1) Prepare projects
-        proj = self.data.project_df.rename(columns={'id':'project_id'})
-        if field_filter:
-            proj = proj[proj['field'].apply(lambda lst: field_filter in lst if isinstance(lst,list) else False)]
-        if project_type:
-            proj = proj[proj['funding_scheme'].isin(project_type)]
-        if year:
-            proj = proj[pd.to_datetime(proj['start_date']).dt.year == int(year)]
+        Parameters:
+        - directory: str. Path where files will be saved.
+        - format: 'csv' or 'excel' (default: 'csv')
+        - include_all: if True, export all loaded dataframes; else only project_df
+        """
+        def _save(df, name):
+            path = os.path.join(directory, f"{name}.{ext}")
+            if format == 'csv':
+                df.to_csv(path, index=False)
 
-        # 2) Build join + metadata
-        rel = (
-            self.data.project_organizations
-              .merge(self.data.organization_df[['id','name','activity_type','country']],
-                     left_on='organization_id', right_on='id', how='left')
-              .rename(columns={'name':'institution','activity_type':'org_type'})
-        )
-        # restrict to chosen projects
-        rel = rel[ rel['project_id'].isin(proj['project_id']) ]
-        if org_types:
-            rel = rel[ rel['org_type'].isin(org_types) ]
-        if countries:
-            rel = rel[ rel['country'].isin(countries) ]
+        if format == 'csv':
+            ext = 'csv'
+        else:
+            print('Use CSV dumbass. Proceeding to store the data as CSV files.')
+            ext = 'csv'
+        _save(self.project_df, "project_df")
 
-        # 3) Aggregate per project
-        collab = (
-            rel.groupby('project_id')['institution']
-               .apply(lambda names: list(set(names)))
-               .reset_index(name='institutions')
-        )
-        collab['n_inst'] = collab['institutions'].str.len()
-        collab = collab[collab['n_inst']>=min_participants].head(max_projects)
-
-        # 4) Build edges & Graph
-        edges = Counter()
-        for insts in collab['institutions']:
-            edges.update(combinations(insts,2))
-
-        G = nx.Graph()
-        for (u,v),w in edges.items():
-            G.add_edge(u,v,weight=w)
-        pos = nx.spring_layout(G, k=0.15, iterations=20)
-
-        # 5) Plotly traces
-        edge_x, edge_y = [], []
-        for u,v in G.edges():
-            x0,y0 = pos[u]; x1,y1 = pos[v]
-            edge_x += [x0,x1,None]; edge_y += [y0,y1,None]
-        edge_trace = go.Scatter(
-            x=edge_x, y=edge_y, mode='lines',
-            line=dict(width=0.5,color='#888'),
-            hoverinfo='none'
-        )
-
-        node_x, node_y, node_text = [], [], []
-        for n in G.nodes():
-            x,y = pos[n]
-            node_x.append(x); node_y.append(y); node_text.append(n)
-        node_trace = go.Scatter(
-            x=node_x, y=node_y, mode='markers+text',
-            text=node_text, textposition='top center',
-            marker=dict(size=10,line_width=2,color='blue')
-        )
-
-        title = (f'Collaboration Network for "{field_filter}"' if field_filter
-                 else 'Institution Collaboration Network')
-        return go.Figure(
-            data=[edge_trace,node_trace],
-            layout=go.Layout(
-                title=title, showlegend=False, hovermode='closest',
-                margin=dict(b=20,l=5,r=5,t=40),
-                xaxis=dict(showgrid=False,zeroline=False),
-                yaxis=dict(showgrid=False,zeroline=False)
-            )
-        )
-
-    def plot_funding_over_time_by_field(self):
-        df = self.data.project_df.copy()
-        print("Available columns in project_df:", df.columns.tolist())
-        if 'start_date' not in df.columns or 'field_class' not in df.columns:
-            raise KeyError("Need 'start_date' & 'field_class' in project_df")
-
-        df['start_date'] = pd.to_datetime(df['start_date'], errors='coerce')
-        df = df.dropna(subset=['start_date'])
-        df['year'] = df['start_date'].dt.year
-
-        # each project can belong to multiple field_classes
-        df = df.explode('field_class')
-
-        df_grouped = (
-            df.groupby(['year','field_class'], as_index=False)['ec_max_contribution']
-              .sum()
-        )
-
-        return px.line(
-            df_grouped,
-            x='year', y='ec_max_contribution', color='field_class',
-            title='Funding Over Time per Scientific Field',
-            labels={
-                'ec_max_contribution':'Funding (EUR)',
-                'year':'Year',
-                'field_class':'Scientific Field'
-            }
-        )
-
-    def plot_funding_per_country_choropleth(self):
-        def to_iso3(a2):
-            try:
-                return pycountry.countries.get(alpha_2=a2).alpha_3
-            except:
-                return None
-
-        df = (
-            self.data.project_organizations
-              .merge(self.data.organization_df[['id','country']],
-                     left_on='organization_id', right_on='id', how='left')
-              .groupby('country', as_index=False)['ec_contribution']
-              .sum()
-              .rename(columns={'ec_contribution':'funding'})
-        )
-        df['iso3'] = df['country'].apply(to_iso3)
-        df = df.dropna(subset=['iso3'])
-
-        return px.choropleth(
-            df,
-            locations='iso3', color='funding',
-            locationmode='ISO-3',
-            color_continuous_scale='Viridis',
-            labels={'funding':'Funding (EUR)'},
-            title='Total EU Funding by Country'
-        )
+        if include_all:
+            _save(self.data_deliverables, "data_deliverables_v2")
+            _save(self.data_publications, "data_publications_v2")
+            _save(self.organization_df, "organization_df_v2")
+            _save(self.legal_basis_df, "legal_basis_df_v2")
+            _save(self.topics_df, "topics_df_v2")
+            _save(self.sci_voc_df, "sci_voc_df_v2")
+            _save(self.web_items_df, "web_items_df_v2")
+            _save(self.web_link_df, "web_link_df_v2")
