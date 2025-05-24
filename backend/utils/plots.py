@@ -4,6 +4,7 @@ import networkx as nx
 import pandas as pd
 from plotly.subplots import make_subplots
 import pycountry
+import numpy as np
 
 
 # Define plotting class

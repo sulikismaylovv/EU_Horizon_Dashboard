@@ -64,9 +64,9 @@ class CORDIS_data():
             self._enrich_scientific_thematic()
         else:
             # Load the processed data
-            self.project_df = pd.read_csv(f'{self.processed_dir}/project_df.csv')
-            self.data_deliverables = pd.read_csv(f'{self.processed_dir}/data_deliverables.csv')
-            self.data_publications = pd.read_csv(f'{self.processed_dir}/data_publications.csv')
+            self.project_df = pd.read_csv(f'{self.processed_dir}/projects.csv')
+            self.data_deliverables = pd.read_csv(f'{self.processed_dir}/deliverables.csv')
+            self.data_publications = pd.read_csv(f'{self.processed_dir}/publications.csv')
 
         # Extract possible scientific fields
         self.scientific_fields = self.extract_scientific_fields()
@@ -553,11 +553,11 @@ class CORDIS_data():
         _save(self.project_df, "project_df")
 
         if include_all:
-            _save(self.data_deliverables, "data_deliverables")
-            _save(self.data_publications, "data_publications")
-            _save(self.organization_df, "organization_df")
-            _save(self.legal_basis_df, "legal_basis_df")
-            _save(self.topics_df, "topics_df")
-            _save(self.sci_voc_df, "sci_voc_df")
-            _save(self.web_items_df, "web_items_df")
-            _save(self.web_link_df, "web_link_df")
+            _save(self.data_deliverables, "data_deliverables_v2")
+            _save(self.data_publications, "data_publications_v2")
+            _save(self.organization_df, "organization_df_v2")
+            _save(self.legal_basis_df, "legal_basis_df_v2")
+            _save(self.topics_df, "topics_df_v2")
+            _save(self.sci_voc_df, "sci_voc_df_v2")
+            _save(self.web_items_df, "web_items_df_v2")
+            _save(self.web_link_df, "web_link_df_v2")
