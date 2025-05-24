@@ -63,10 +63,24 @@ class CORDIS_data():
             self._enrich_financial_metrics()
             self._enrich_scientific_thematic()
         else:
-            # Load the processed data
-            self.project_df = pd.read_csv(f'{self.processed_dir}/projects.csv')
-            self.data_deliverables = pd.read_csv(f'{self.processed_dir}/deliverables.csv')
-            self.data_publications = pd.read_csv(f'{self.processed_dir}/publications.csv')
+            P = self.processed_dir
+            # core
+            self.project_df         = pd.read_csv(f'{P}/projects.csv')
+            self.data_deliverables  = pd.read_csv(f'{P}/deliverables.csv')
+            self.data_publications  = pd.read_csv(f'{P}/publications.csv')
+            # dimensions
+            self.organization_df    = pd.read_csv(f'{P}/organizations.csv')
+            self.topics_df          = pd.read_csv(f'{P}/topics.csv')
+            self.legal_basis_df     = pd.read_csv(f'{P}/legal_basis.csv')
+            self.sci_voc_df         = pd.read_csv(f'{P}/sci_voc.csv')
+            # joins
+            self.project_organizations = pd.read_csv(f'{P}/project_organizations.csv')
+            self.project_topics        = pd.read_csv(f'{P}/project_topics.csv')
+            self.project_legal_basis   = pd.read_csv(f'{P}/project_legal_basis.csv')
+            self.project_sci_voc       = pd.read_csv(f'{P}/project_sci_voc.csv')
+            self.web_items_df       = pd.read_csv(f'{P}/web_items.csv')
+            self.web_link_df        = pd.read_csv(f'{P}/web_links.csv')
+            
 
         # Extract possible scientific fields
         self.scientific_fields = self.extract_scientific_fields()
@@ -286,6 +300,13 @@ class CORDIS_data():
 
         # 4) Write back
         self.project_df = df
+        print(f"Enriched project_df with scientific and thematic information: {len(self.project_df)} projects")
+        # Print columns of the project dataframe and line separator b efore returning
+        print("Columns of the project dataframe after enrichment:")
+        print(f"  - {len(df.columns)} columns")
+        print("  - Columns: ", end="")
+        print(", ".join(df.columns))
+        print("==========================================================")
 
     def get_projects_by_scientific_field(self):
         """
