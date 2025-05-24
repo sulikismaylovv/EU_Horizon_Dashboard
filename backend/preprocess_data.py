@@ -99,7 +99,8 @@ def enrich(parent_dir: Path):
         parent_dir / "data" / "processed", format="csv", include_all=True
     )
     logger.info("Enrichment complete")
-
+    
+    
 
 def main():
     parser = argparse.ArgumentParser(description="Load, clean (and optionally transform) CORDIS data")
