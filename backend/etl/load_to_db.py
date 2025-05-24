@@ -37,7 +37,6 @@ ON_CONFLICT = {
     "project_organizations": "project_id,organization_id",
     "deliverables":          "id",
     "publications":          "id",
-    "web_items":             "id",
     "web_links":             "id",
 }
 
@@ -235,14 +234,29 @@ def load_aux():
     # Deliverables
     df = safe_load_csv("deliverables.csv"); df = fix_blanks(df)
     df = df.drop_duplicates(subset=["id"])
-    # coerce project_id
+    # Ensure project_id is numeric, coercing errors to NaN
     df["project_id"] = pd.to_numeric(df["project_id"], errors="coerce")
+
+    # Drop any rows where it failed
     bad = df["project_id"].isna()
-    if bad.any(): logging.warning("Skipping deliverables with invalid project_id: %s", df.loc[bad, 'id'].tolist())
+    if bad.any():
+        logging.warning("Skipping deliverables with invalid project_id: %s", df.loc[bad, "id"].tolist())
     df = df.loc[~bad]
-    cols = ["id","project_id","title","deliverable_type","description","url","collection","content_update_date"]
+
+    # Now cast to int
+    df["project_id"] = df["project_id"].astype(int)
+
+    # Proceed with your upsert
+    cols = [
+        "id","project_id","title","deliverable_type",
+        "description","url","collection","content_update_date"
+    ]
     logging.info("Upserting %d deliverables", len(df))
-    batch_upsert("deliverables", df[cols].where(pd.notnull(df), None).to_dict("records"), date_fields={"content_update_date"})
+    #batch_upsert(
+    #    "deliverables",
+    #    df[cols].where(pd.notnull(df), None).to_dict("records"),
+    #    date_fields={"content_update_date"}
+    #)
 
     # Publications
     df = safe_load_csv("publications.csv"); df = fix_blanks(df)
@@ -253,35 +267,132 @@ def load_aux():
     df = df.loc[~bad]
     cols = ["id","project_id","title","is_published_as","authors","journal_title","journal_number","published_year","published_pages","issn","isbn","doi","collection","content_update_date"]
     logging.info("Upserting %d publications", len(df))
-    batch_upsert("publications", df[cols].where(pd.notnull(df), None).to_dict("records"), date_fields={"content_update_date"})
+    #batch_upsert("publications", df[cols].where(pd.notnull(df), None).to_dict("records"), date_fields={"content_update_date"})
 
     # Web items
-    df = safe_load_csv("web_items.csv"); df = fix_blanks(df)
-    df = df.drop_duplicates(subset=["id"] if "id" in df else [])
-    df["available_languages"] = df["available_languages"].apply(safe_json_load)
-    cols = ["language","available_languages","uri","title","type","source","represents"]
-    logging.info("Upserting %d web_items", len(df))
-    batch_upsert("web_items", df[cols].where(pd.notnull(df), None).to_dict("records"))
+    load_web_items()
+    # Note: web_items are loaded separately due to their unique structure
+
+
 
     # Web links
-    df = safe_load_csv("web_links.csv"); df = fix_blanks(df)
-    df = df.drop_duplicates(subset=["id"])
-    df["available_languages"] = df["available_languages"].apply(safe_json_load)
-    cols = ["id","project_id","phys_url","available_languages","status","archived_date","type","source","represents"]
-    logging.info("Upserting %d web_links", len(df))
-    batch_upsert("web_links", df[cols].where(pd.notnull(df), None).to_dict("records"), date_fields={"archived_date"})
+    load_web_links()
+    # Note: web_links are loaded separately due to their unique structure
     
+    
+# ──────────────────────────────────────────────────────────────────────────────
+# Stage X: Custom tables
+
+
+def load_web_links():
+    print("Loading web_links.csv")
+    df = safe_load_csv("web_links.csv")
+    df = fix_blanks(df)
+
+    # normalize JSON arrays
+    df["available_languages"] = df["available_languages"].apply(safe_json_load)
+
+    # rename to match DDL if needed
+    df = df.rename(columns={
+        "physUrl": "phys_url",
+        "archivedDate": "archived_date"
+    })
+
+    # coerce project_id → int, invalid → NaN
+    df["project_id"] = pd.to_numeric(df["project_id"], errors="coerce")
+    # coerce represents → int, invalid → NaN
+    df["represents"] = pd.to_numeric(df["represents"], errors="coerce")
+
+    # any rows where represents is NaN, fallback to project_id
+    mask = df["represents"].isna()
+    if mask.any():
+        bad_reprs = df.loc[mask, ["id","project_id","represents"]]
+        logging.warning(
+            "web_links: %d rows had bad represents; falling back to project_id: %s",
+            mask.sum(),
+            bad_reprs.to_dict("records")
+        )
+        df.loc[mask, "represents"] = df.loc[mask, "project_id"]
+
+    # Now cast to Python ints or None
+    df["project_id"]  = df["project_id"].apply(lambda x: int(x) if pd.notna(x) else None)
+    df["represents"]  = df["represents"].apply(lambda x: int(x) if pd.notna(x) else None)
+
+    # pick only the DDL columns
+    cols = [
+      "id", "project_id", "phys_url", "available_languages",
+      "status", "archived_date", "type", "source", "represents"
+    ]
+    df = df.loc[:, cols]
+
+    records = df.where(pd.notnull(df), None).to_dict("records")
+    if not records:
+        logging.info("No web_links to insert; skipping.")
+        return
+
+    logging.info("Upserting %d web_links", len(records))
+    batch_upsert("web_links", records, date_fields={"archived_date"})
+    
+
+def load_web_items():
+    print("Loading web_items.csv")
+    df = safe_load_csv("web_items.csv")
+    df = fix_blanks(df)
+    df["available_languages"] = df["available_languages"].apply(safe_json_load)
+
+    # coerce project_id → float, then int or fallback
+    df["project_id"] = pd.to_numeric(df["project_id"], errors="coerce")
+    bad = df[df["project_id"].isna()]
+    if not bad.empty:
+        logging.warning(
+            "web_items: %d rows had invalid project_id; using fallback 101039048: %s",
+            len(bad),
+            bad[["language","title","type","project_id"]]
+               .fillna("nan").to_dict("records")
+        )
+    df["project_id"] = df["project_id"].apply(
+        lambda x: int(x) if pd.notna(x) else 101039048
+    )
+
+    # build clean payload, converting any leftover NaN→None
+    cols = ["language","available_languages","uri","title","type","source","project_id"]
+    records = []
+    for _, row in df.iterrows():
+        rec = {}
+        for c in cols:
+            v = row[c]
+            # catch numpy NaN or inf
+            if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                rec[c] = None
+            else:
+                rec[c] = v
+        records.append(rec)
+
+    if not records:
+        logging.info("No web_items to insert; skipping.")
+        return
+
+    logging.info("Inserting %d web_items", len(records))
+    resp = supabase.table("web_items").insert(records).execute()
+    if getattr(resp, "status_code", None) not in (200,201):
+        logging.error("web_items insert failed: %s", resp)
+    else:
+        logging.info("web_items inserted successfully")
 
 # ──────────────────────────────────────────────────────────────────────────────
 def main():
     logging.info("=== Stage 1: Core tables ===")
-    load_core()
+    #load_core()
     
     logging.info("=== Stage 2: Relationship tables ===")
-    load_relationships()
+    #load_relationships()
 
     logging.info("=== Stage 3: Auxiliary tables ===")
     load_aux()
+    
+    logging.info("=== Stage X: Adding more custom tables ===")
+    # Add any custom tables here, e.g.:
+    # load_custom_table("custom_table.csv", "custom_table")
 
     logging.info("✅ Data load to Supabase complete!")
 
