@@ -17,6 +17,8 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
+# Silence verbose HTTP logs from PostgREST
+logging.getLogger("postgrest").setLevel(logging.WARNING)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Config
@@ -24,57 +26,27 @@ DATA_DIR = "data/processed"
 BATCH_SIZE = 200
 
 ON_CONFLICT = {
-    "projects":                "id",
-    "organizations":           "id",
-    "topics":                  "code",
-    "legal_basis":             "code",
-    "sci_voc":                 "code",
-    "project_topics":          "project_id,topic_code",
-    "project_legal_basis":     "project_id,legal_basis_code",
-    "project_sci_voc":         "project_id,sci_voc_code",
-    "project_organizations":   "project_id,organization_id",
-    "deliverables":            "id",
-    "publications":            "id",
-    "web_items":               "id",
-    "web_links":               "id",
+    "projects":              "id",
+    "organizations":         "id",
+    "topics":                "code",
+    "legal_basis":           "code",
+    "sci_voc":               "code",
+    "project_topics":        "project_id,topic_code",
+    "project_legal_basis":   "project_id,legal_basis_code",
+    "project_sci_voc":       "project_id,sci_voc_code",
+    "project_organizations": "project_id,organization_id",
+    "deliverables":          "id",
+    "publications":          "id",
+    "web_items":             "id",
+    "web_links":             "id",
 }
 
-# map any remaining camelCase → snake_case
-COLUMN_ALIASES = {
-    "startdate":                "start_date",
-    "enddate":                  "end_date",
-    "ecsignaturedate":          "ec_signature_date",
-    "contentupdatedate":        "content_update_date",
-    "grantdoi":                 "grant_doi",
-    "ecmaxcontribution":        "ec_max_contribution",
-    "totalcost":                "total_cost",
-    "eccontribution_per_year":  "ec_contribution_per_year",
-    "totalcost_per_year":       "total_cost_per_year",
-    "frameworkprogramme":       "framework_programme",
-    "mastercall":               "master_call",
-    "subcall":                  "sub_call",
-    "fundingscheme":            "funding_scheme",
-    "uniqueprogrammepart":      "unique_programme_part",
-    "deliverabletype":          "deliverable_type",
-    "ispublishedas":            "is_published_as",
-    "journaltitle":             "journal_title",
-    "journalnumber":            "journal_number",
-    "publishedyear":            "published_year",
-    "publishedpages":           "published_pages",
-    "physurl":                  "phys_url",
-    "archiveddate":             "archived_date",
-    "availablelanguages":       "available_languages",
-    "organisationid":           "organization_id",
-    "projectid":                "project_id",
-    "publicationid":            "id",            # in publications.csv
-    "deliverableid":            "id",            # in deliverables.csv
-}
 
 # ──────────────────────────────────────────────────────────────────────────────
 def clean_date(val):
     """Normalize datetimes to ISO strings or None."""
     try:
-        if pd.isnull(val) or val in ("", "nan", "NaT", None):
+        if pd.isnull(val) or val in (None, "", "nan", "NaT"):
             return None
         dt = pd.to_datetime(val, errors="coerce")
         if pd.isnull(dt):
@@ -83,21 +55,41 @@ def clean_date(val):
     except Exception:
         return None
 
+
+def fix_blanks(df: pd.DataFrame) -> pd.DataFrame:
+    # Convert all empty strings to NA
+    return df.replace({"": pd.NA})
+
+
 def fix_floats_and_dates(records, date_fields=None):
     date_fields = date_fields or set()
     for row in records:
-        for k, v in list(row.items()):
+        for k, v in row.items():
             if k in date_fields:
                 row[k] = clean_date(v)
             elif isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
                 row[k] = None
     return records
 
+
 def batch_upsert(table, records, date_fields=None):
     if not records:
-        logging.info(f"No records to upsert for {table}")
+        logging.info(f"{table}: no records to upsert")
         return
+    # dedupe by conflict key to avoid "affect row a second time"
     conflict = ON_CONFLICT.get(table)
+    if conflict and "," not in conflict:
+        key = conflict
+        seen = set()
+        unique = []
+        for r in records:
+            val = r.get(key)
+            if val in seen:
+                continue
+            seen.add(val)
+            unique.append(r)
+        records = unique
+    logging.info(f"⏳ {table}: upserting {len(records)} records")
     records = fix_floats_and_dates(records, date_fields)
     for i in range(0, len(records), BATCH_SIZE):
         batch = records[i : i + BATCH_SIZE]
@@ -106,40 +98,42 @@ def batch_upsert(table, records, date_fields=None):
         else:
             res = supabase.table(table).insert(batch).execute()
         if getattr(res, "status_code", None) not in (200, 201):
-            logging.error(f"{table} batch starting {i} failed: {res}")
+            logging.error(f"{table} batch {i} failed: {res}")
 
-def safe_load_csv(name, **kwargs):
+
+def safe_load_csv(name, **kwargs) -> pd.DataFrame:
     path = os.path.join(DATA_DIR, name)
     if not os.path.exists(path):
         logging.error(f"Missing CSV: {path}")
         return pd.DataFrame()
-    df = pd.read_csv(path, dtype=str, **kwargs)
-    # normalize & alias columns
-    df.columns = df.columns.str.strip().str.lower()
-    df.rename(columns={k: v for k, v in COLUMN_ALIASES.items()}, inplace=True)
+    df = pd.read_csv(
+        path,
+        dtype=str,
+        na_values=[""],       # treat empty strings as NA
+        keep_default_na=True,
+        **kwargs
+    )
     return df
 
+
 def safe_json_load(val):
-    if pd.isnull(val):
+    if pd.isna(val):
         return []
     try:
-        if isinstance(val, str):
-            return json.loads(val)
-        return val if isinstance(val, list) else [val]
+        return json.loads(val) if isinstance(val, str) else list(val)
     except Exception:
         return []
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Stage 1: Core tables
+
 def load_core():
     # Projects
-    df = safe_load_csv("projects.csv", keep_default_na=False)
-    df = df.rename(columns={
-        # ensure start/end are snake_case
-        "startdate": "start_date",
-        "enddate":   "end_date",
-    })
-    cols = [
+    df = safe_load_csv("projects.csv")
+    df = fix_blanks(df)
+    df.rename(columns={"startdate":"start_date","enddate":"end_date"}, inplace=True)
+    df = df.drop_duplicates(subset=["id"])
+    project_cols = [
         "id","acronym","status","title",
         "start_date","end_date","total_cost","ec_max_contribution","ec_signature_date",
         "framework_programme","master_call","sub_call","funding_scheme","nature","objective","content_update_date",
@@ -147,106 +141,142 @@ def load_core():
         "duration_days","duration_months","duration_years",
         "n_institutions","coordinator_name","ec_contribution_per_year","total_cost_per_year"
     ]
-    df = df[cols].where(pd.notnull(df), None)
-    batch_upsert("projects", df.to_dict("records"), date_fields={"start_date","end_date","ec_signature_date","content_update_date"})
+    batch_upsert(
+        "projects",
+        df[project_cols].where(pd.notnull(df), None).to_dict(orient="records"),
+        date_fields={"start_date","end_date","ec_signature_date","content_update_date"}
+    )
 
     # Organizations
-    df = safe_load_csv("organizations.csv", keep_default_na=False)
+    df = safe_load_csv("organizations.csv")
+    df = fix_blanks(df)
     df["sme"] = df["sme"].astype(str).str.lower().map({"true":True,"false":False}).fillna(False)
-    cols = [
+    df = df.drop_duplicates(subset=["id"])
+    org_cols = [
         "id","name","short_name","vat_number","sme","activity_type",
         "street","post_code","city","country","nuts_code","geolocation",
         "organization_url","contact_form","content_update_date"
     ]
-    df = df[cols].where(pd.notnull(df), None)
-    batch_upsert("organizations", df.to_dict("records"), date_fields={"content_update_date"})
+    batch_upsert(
+        "organizations",
+        df[org_cols].where(pd.notnull(df), None).to_dict(orient="records"),
+        date_fields={"content_update_date"}
+    )
 
     # Topics
     df = safe_load_csv("topics.csv")
-    batch_upsert("topics", df[["code","title"]].drop_duplicates("code").to_dict("records"))
+    df = fix_blanks(df)
+    batch_upsert("topics", df[["code","title"]].drop_duplicates("code").to_dict(orient="records"))
 
     # Legal basis
     df = safe_load_csv("legal_basis.csv")
-    batch_upsert(
-        "legal_basis",
-        df[["code","title","unique_programme_part"]].drop_duplicates("code").to_dict("records")
-    )
+    df = fix_blanks(df)
+    lb = df[["code","title","unique_programme_part"]].drop_duplicates("code").to_dict(orient="records")
+    batch_upsert("legal_basis", lb)
 
     # SciVoc
     df = safe_load_csv("sci_voc.csv")
-    batch_upsert(
-        "sci_voc",
-        df[["code","path","title","description"]].drop_duplicates("code").to_dict("records")
-    )
+    df = fix_blanks(df)
+    sv = df[["code","path","title","description"]].drop_duplicates("code").to_dict(orient="records")
+    batch_upsert("sci_voc", sv)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Stage 2: Relationships
+
 def load_relationships():
-    # re-read projects to explode lists
-    proj = safe_load_csv("projects.csv")
-    # project_topics
-    recs = []
-    for _, r in proj.iterrows():
-        for t in safe_json_load(r.get("topics")):
-            recs.append({"project_id": r["id"], "topic_code": t})
-    batch_upsert("project_topics", recs)
-
-    # project_legal_basis
-    recs = []
-    for _, r in proj.iterrows():
-        for lb in safe_json_load(r.get("legal_basis")):
-            recs.append({"project_id": r["id"], "legal_basis_code": lb})
-    batch_upsert("project_legal_basis", recs)
-
-    # project_sci_voc
-    recs = []
-    for _, r in proj.iterrows():
-        for sv in safe_json_load(r.get("sci_voc")):
-            recs.append({"project_id": r["id"], "sci_voc_code": sv})
-    batch_upsert("project_sci_voc", recs)
-
-    # project_organizations
-    recs = []
-    for _, r in proj.iterrows():
-        for org in safe_json_load(r.get("institutions")):
-            recs.append({"project_id": r["id"], "organization_id": org})
-    batch_upsert("project_organizations", recs)
+    # Load project_topics.csv
+    df = safe_load_csv("project_topics.csv")
+    df = fix_blanks(df)
+    df = df.drop_duplicates(subset=["project_id", "topic_code"])
+    batch_upsert(
+        "project_topics",
+        df[["project_id", "topic_code"]].where(pd.notnull(df), None).to_dict(orient="records"),
+        date_fields=set()  # No date fields in this table
+    )
+    
+    
+    # Load project_legal_basis.csv
+    df = safe_load_csv("project_legal_basis.csv")
+    df = fix_blanks(df)
+    df = df.drop_duplicates(subset=["project_id", "legal_basis_code"])
+    batch_upsert(
+        "project_legal_basis",
+        df[["project_id", "legal_basis_code"]].where(pd.notnull(df), None).to_dict(orient="records"),
+        date_fields=set()  # No date fields in this table
+    )
+    
+    # Load project_sci_voc.csv
+    df = safe_load_csv("project_sci_voc.csv")
+    df = fix_blanks(df)
+    df = df.drop_duplicates(subset=["project_id", "sci_voc_code"])
+    batch_upsert(
+        "project_sci_voc",
+        df[["project_id", "sci_voc_code"]].where(pd.notnull(df), None).to_dict(orient="records"),
+        date_fields=set()  # No date fields in this table
+    )
+    
+    # Load project_organizations.csv
+    df = safe_load_csv("project_organizations.csv")
+    df = fix_blanks(df)
+    df = df.drop_duplicates(subset=["project_id", "organization_id"])
+    df["end_of_participation"] = df["end_of_participation"].apply(clean_date)
+    batch_upsert(
+        "project_organizations",
+        df[[
+            "project_id", "organization_id", "role", "order_index", "end_of_participation"
+        ]].where(pd.notnull(df), None).to_dict(orient="records"),
+        date_fields={"end_of_participation"}
+    )   
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Stage 3: Auxiliaries
+
 def load_aux():
     # Deliverables
-    df = safe_load_csv("deliverables.csv", keep_default_na=False)
+    df = safe_load_csv("deliverables.csv"); df = fix_blanks(df)
+    df = df.drop_duplicates(subset=["id"])
+    # coerce project_id
+    df["project_id"] = pd.to_numeric(df["project_id"], errors="coerce")
+    bad = df["project_id"].isna()
+    if bad.any(): logging.warning("Skipping deliverables with invalid project_id: %s", df.loc[bad, 'id'].tolist())
+    df = df.loc[~bad]
     cols = ["id","project_id","title","deliverable_type","description","url","collection","content_update_date"]
-    df = df[cols].where(pd.notnull(df), None)
-    batch_upsert("deliverables", df.to_dict("records"), date_fields={"content_update_date"})
+    logging.info("Upserting %d deliverables", len(df))
+    batch_upsert("deliverables", df[cols].where(pd.notnull(df), None).to_dict("records"), date_fields={"content_update_date"})
 
     # Publications
-    df = safe_load_csv("publications.csv", keep_default_na=False)
-    cols = ["id","project_id","title","is_published_as","authors","journal_title","journal_number",
-            "published_year","published_pages","issn","isbn","doi","collection","content_update_date"]
-    df = df[cols].where(pd.notnull(df), None)
-    batch_upsert("publications", df.to_dict("records"), date_fields={"content_update_date"})
+    df = safe_load_csv("publications.csv"); df = fix_blanks(df)
+    df = df.drop_duplicates(subset=["id"])
+    df["project_id"] = pd.to_numeric(df["project_id"], errors="coerce")
+    bad = df["project_id"].isna()
+    if bad.any(): logging.warning("Skipping publications with invalid project_id: %s", df.loc[bad, 'id'].tolist())
+    df = df.loc[~bad]
+    cols = ["id","project_id","title","is_published_as","authors","journal_title","journal_number","published_year","published_pages","issn","isbn","doi","collection","content_update_date"]
+    logging.info("Upserting %d publications", len(df))
+    batch_upsert("publications", df[cols].where(pd.notnull(df), None).to_dict("records"), date_fields={"content_update_date"})
 
-    # Web items (represents → project_id in CSV)
-    df = safe_load_csv("web_items.csv", keep_default_na=False)
+    # Web items
+    df = safe_load_csv("web_items.csv"); df = fix_blanks(df)
+    df = df.drop_duplicates(subset=["id"] if "id" in df else [])
     df["available_languages"] = df["available_languages"].apply(safe_json_load)
     cols = ["language","available_languages","uri","title","type","source","represents"]
-    df = df[cols].where(pd.notnull(df), None)
-    batch_upsert("web_items", df.to_dict("records"))
+    logging.info("Upserting %d web_items", len(df))
+    batch_upsert("web_items", df[cols].where(pd.notnull(df), None).to_dict("records"))
 
     # Web links
-    df = safe_load_csv("web_links.csv", keep_default_na=False)
+    df = safe_load_csv("web_links.csv"); df = fix_blanks(df)
+    df = df.drop_duplicates(subset=["id"])
     df["available_languages"] = df["available_languages"].apply(safe_json_load)
     cols = ["id","project_id","phys_url","available_languages","status","archived_date","type","source","represents"]
-    df = df[cols].where(pd.notnull(df), None)
-    batch_upsert("web_links", df.to_dict("records"), date_fields={"archived_date"})
+    logging.info("Upserting %d web_links", len(df))
+    batch_upsert("web_links", df[cols].where(pd.notnull(df), None).to_dict("records"), date_fields={"archived_date"})
+    
 
 # ──────────────────────────────────────────────────────────────────────────────
 def main():
     logging.info("=== Stage 1: Core tables ===")
     load_core()
-
+    
     logging.info("=== Stage 2: Relationship tables ===")
     load_relationships()
 
