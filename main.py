@@ -5,7 +5,6 @@ from pathlib import Path
 from backend.config import SUPABASE_URL, SUPABASE_SERVICE_KEY
 from backend.init_env import init_project
 
-# Ensure the project root is in sys.path
 project_root = Path(__file__).resolve().parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
@@ -20,11 +19,11 @@ def load_to_db():
     from backend.etl.load_to_db import main as load_main
     from backend.db.validate_schema import main as validate_schema_main
 
-    print("🔍 Validating schema before loading...")
+    print("Validating schema before loading...")
     validate_schema_main()
 
-    print("🚀 Starting data load to Supabase...")
-    load_main()
+    print("Starting data load to Supabase...")
+    #load_main()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run CORDIS data workflow")
@@ -35,7 +34,7 @@ if __name__ == "__main__":
     prep_parser.add_argument("--transform", action="store_true", help="Run the transformation stage")
     prep_parser.add_argument("--no-enrich", action="store_true", help="Skip enrichment stage")
 
-    subparsers.add_parser("load", help="Load processed data to Supabase")
+    subparsers.add_parser("load", help="Validate schemas and load processed data to Supabase")
 
     args, unknown = parser.parse_known_args()
 

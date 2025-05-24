@@ -95,9 +95,8 @@ def process(group: str, do_transform: bool):
 def enrich(parent_dir: Path):
     logger.info("Enriching with CORDIS_data")
     cd = CORDIS_data(parent_dir=parent_dir, enrich=True)
-    cd.export_dataframes(
-        parent_dir / "data" / "processed", format="csv", include_all=True
-    )
+    cd.export_to_db_schema("data/processed")
+
     logger.info("Enrichment complete")
     
     
