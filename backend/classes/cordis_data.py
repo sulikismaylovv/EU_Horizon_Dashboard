@@ -374,16 +374,27 @@ class CORDIS_data():
             'ecMaxContribution': 'ec_max_contribution',
             'ecSignatureDate': 'ec_signature_date',
             'contentUpdateDate': 'content_update_date',
-            'grantDoi': 'grant_doi'
+            'grantDoi': 'grant_doi',
+            'frameworkProgramme': 'framework_programme',
+            'masterCall': 'master_call',
+            'subCall': 'sub_call',
+            'fundingScheme': 'funding_scheme',
+            'nature': 'nature',
+            'objective': 'objective',
+            'rcn': 'rcn',
+            'grantDoi': 'grant_doi',
+            'ecContribution_per_year': 'ec_contribution_per_year',
+            'totalCost_per_year': 'total_cost_per_year'
+            
         })
         keep = [
             'id', 'acronym', 'status', 'title',
             'start_date', 'end_date', 'total_cost', 'ec_max_contribution', 'ec_signature_date',
-            'frameworkProgramme', 'masterCall', 'subCall', 'fundingScheme', 'nature', 'objective', 'content_update_date',
+            'framework_programme', 'master_call', 'sub_call', 'funding_scheme', 'nature', 'objective', 'content_update_date',
             'rcn', 'grant_doi',
             'duration_days', 'duration_months', 'duration_years',
             'n_institutions', 'coordinator_name',
-            'ecContribution_per_year', 'totalCost_per_year'
+            'ec_contribution_per_year', 'total_cost_per_year'
         ]
         proj[keep].to_csv(os.path.join(out, 'projects.csv'), index=False)
 

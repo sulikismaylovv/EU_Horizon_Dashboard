@@ -23,7 +23,7 @@ def load_to_db():
     validate_schema_main()
 
     print("Starting data load to Supabase...")
-    #load_main()
+    load_main()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run CORDIS data workflow")

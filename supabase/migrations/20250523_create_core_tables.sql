@@ -166,7 +166,7 @@ CREATE TABLE public.web_items (
   title                text,
   type                 text,
   source               text,
-  represents           bigint REFERENCES public.projects(id)
+  project_id           bigint REFERENCES public.projects(id)
 );
 
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -21,10 +21,10 @@ REQUIRED_SCHEMAS = {
     "projects.csv": [
         "id", "acronym", "status", "title",
         "start_date", "end_date", "total_cost", "ec_max_contribution", "ec_signature_date",
-        "frameworkProgramme", "masterCall", "subCall", "fundingScheme", "nature", "objective", "content_update_date",
+        "framework_programme", "master_call", "sub_call", "funding_scheme", "nature", "objective", "content_update_date",
         "rcn", "grant_doi",
         "duration_days", "duration_months", "duration_years",
-        "n_institutions", "coordinator_name", "ecContribution_per_year", "totalCost_per_year"
+        "n_institutions", "coordinator_name", "ec_contribution_per_year", "total_cost_per_year"
     ],
     "topics.csv": ["code", "title"],
     "project_topics.csv": ["project_id", "topic_code"],
