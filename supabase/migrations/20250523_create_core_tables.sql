@@ -28,7 +28,11 @@ CREATE TABLE public.projects (
   n_institutions             integer,
   coordinator_name           text,
   ec_contribution_per_year   numeric,
-  total_cost_per_year        numeric
+  total_cost_per_year        numeric,
+  field_class                text,
+  field                      text,
+  sub_field                  text,
+  niche                      text
 );
 
 CREATE INDEX idx_projects_start_date ON public.projects(start_date);
@@ -183,5 +187,26 @@ CREATE TABLE public.web_links (
   source               text,
   represents           bigint
 );
+
+CREATE INDEX idx_web_links_project ON public.web_links(project_id);
+CREATE INDEX idx_web_links_type ON public.web_links(type);
+
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- 10. Create/Grant permissions
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+
+GRANT USAGE ON SCHEMA public TO service_role;
+GRANT INSERT, SELECT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO service_role;
+
+CREATE POLICY "Allow service_role to insert projects"
+  ON projects
+  FOR INSERT
+  TO service_role
+  WITH CHECK (true);
+  
+GRANT USAGE, SELECT ON SEQUENCE public.web_items_id_seq TO service_role;
+
 
 COMMIT;

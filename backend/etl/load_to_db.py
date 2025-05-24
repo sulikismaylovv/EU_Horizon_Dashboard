@@ -138,7 +138,8 @@ def load_core():
         "framework_programme","master_call","sub_call","funding_scheme","nature","objective","content_update_date",
         "rcn","grant_doi",
         "duration_days","duration_months","duration_years",
-        "n_institutions","coordinator_name","ec_contribution_per_year","total_cost_per_year"
+        "n_institutions","coordinator_name","ec_contribution_per_year","total_cost_per_year",
+        "field_class","field","sub_field","niche"
     ]
     batch_upsert(
         "projects",
@@ -382,10 +383,10 @@ def load_web_items():
 # ──────────────────────────────────────────────────────────────────────────────
 def main():
     logging.info("=== Stage 1: Core tables ===")
-    #load_core()
+    load_core()
     
     logging.info("=== Stage 2: Relationship tables ===")
-    #load_relationships()
+    load_relationships()
 
     logging.info("=== Stage 3: Auxiliary tables ===")
     load_aux()

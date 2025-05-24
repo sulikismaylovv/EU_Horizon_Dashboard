@@ -384,7 +384,8 @@ class CORDIS_data():
             'rcn': 'rcn',
             'grantDoi': 'grant_doi',
             'ecContribution_per_year': 'ec_contribution_per_year',
-            'totalCost_per_year': 'total_cost_per_year'
+            'totalCost_per_year': 'total_cost_per_year',
+            'subfield' : 'sub_field',
             
         })
         keep = [
@@ -394,7 +395,8 @@ class CORDIS_data():
             'rcn', 'grant_doi',
             'duration_days', 'duration_months', 'duration_years',
             'n_institutions', 'coordinator_name',
-            'ec_contribution_per_year', 'total_cost_per_year'
+            'ec_contribution_per_year', 'total_cost_per_year',
+            'field_class', 'field', 'sub_field', 'niche',
         ]
         proj[keep].to_csv(os.path.join(out, 'projects.csv'), index=False)
 
