@@ -1,8 +1,18 @@
 # backend/config.py
 
+import os
 from pathlib import Path
+from dotenv import load_dotenv
 
+# Load .env file from project root (one level above /backend)
 BASE_DIR: Path = Path(__file__).resolve().parent.parent
+load_dotenv(dotenv_path=BASE_DIR / ".env")
+
+# Supabase configuration
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+
 RAW_DIR: Path = BASE_DIR / "data" / "raw"
 INTERIM_DIR: Path = BASE_DIR / "data" / "interim"
 PROCESSED_DIR: Path = BASE_DIR / "data" / "processed"

@@ -62,6 +62,11 @@ class CORDIS_data():
             self._enrich_people_and_institutions()
             self._enrich_financial_metrics()
             self._enrich_scientific_thematic()
+        else:
+            # Load the processed data
+            self.project_df = pd.read_csv(f'{self.processed_dir}/projects.csv')
+            self.data_deliverables = pd.read_csv(f'{self.processed_dir}/deliverables.csv')
+            self.data_publications = pd.read_csv(f'{self.processed_dir}/publications.csv')
 
         # Extract possible scientific fields
         self.scientific_fields = self.extract_scientific_fields()
@@ -217,11 +222,70 @@ class CORDIS_data():
         df = df.merge(sci_paths,    how='left', on='id')
         df = df.merge(topic_titles, how='left', on='id')
 
+        # cover missing values
+        # sciVoc columns do not cover all projects. We set the NaNs to specific values
+        df['sci_voc_titles'] = df['sci_voc_titles'].apply(lambda x: x if isinstance(x, list) else ['other'])
+        df['sci_voc_paths'] = df['sci_voc_paths'].apply(lambda x: x if isinstance(x, list) else ['other'])
+        
+        # add field_class, field, subfield to the DataFrame
+        def get_level(x, level):
+            '''
+            this function checks if the string separated by / has sufficient levels of depth 
+            If not, return None
+            '''
+            parts = x.split('/')
+            return parts[level] if len(parts) > level else None
+
+        field_classes = (
+            self.sci_voc_df
+            .groupby('projectID')['euroSciVocPath']
+            .apply(lambda x: list(set(get_level(i, 1) for i in x)))
+            .reset_index(name='field_class')
+        )
+
+        fields = (
+            self.sci_voc_df
+            .groupby('projectID')['euroSciVocPath']
+            .apply(lambda x: list(set(get_level(i, 2) for i in x if get_level(i, 2) is not None)))
+            .reset_index(name='field')
+        )
+
+        subfields = (
+            self.sci_voc_df
+            .groupby('projectID')['euroSciVocPath']
+            .apply(lambda x: list(set(get_level(i, 3) for i in x if get_level(i, 3) is not None)))
+            .reset_index(name='subfield')
+        )
+
+        niche = (
+            self.sci_voc_df
+            .groupby('projectID')['euroSciVocPath']
+            .apply(lambda x: list(set(get_level(i, 4) for i in x if get_level(i, 4) is not None)))
+            .reset_index(name='niche')
+        )
+
+        # rename identification key
+        field_classes   = field_classes.rename(columns={'projectID':'id'})
+        fields  = fields.rename(columns={'projectID':'id'})
+        subfields = subfields.rename(columns={'projectID':'id'})
+        niche = niche.rename(columns={'projectID':'id'})
+
+        # Merge on common identification column
+        df = self.project_df
+        df = df.merge(field_classes,   how='left', on='id')
+        df = df.merge(fields,    how='left', on='id')
+        df = df.merge(subfields, how='left', on='id')
+        df = df.merge(niche, how='left', on='id')
+
+        # cover missing values
+        # Not all projects are present in the SciVoc dataset
+        df['field_class'] = df['field_class'].apply(lambda x: x if isinstance(x, list) else ['other'])
+        df['field'] = df['field'].apply(lambda x: x if isinstance(x, list) else ['other'])
+        df['subfield'] = df['subfield'].apply(lambda x: x if isinstance(x, list) else ['other'])
+        df['niche'] = df['niche'].apply(lambda x: x if isinstance(x, list) else ['other'])
+
         # 4) Write back
         self.project_df = df
-
-
-
 
     def get_projects_by_scientific_field(self):
         """
@@ -258,6 +322,214 @@ class CORDIS_data():
             if segments:
                 fields.add(segments[0])
         return sorted(fields)
+    
+    
+    def export_raw(self, directory, include_all=False):
+        """
+        Original export of raw/interim tables (kept for backward compatibility).
+        """
+        os.makedirs(directory, exist_ok=True)
+        self.project_df.to_csv(os.path.join(directory, 'project_df.csv'), index=False)
+        if include_all:
+            self.data_deliverables.to_csv(os.path.join(directory, 'data_deliverables.csv'), index=False)
+            self.data_publications.to_csv(os.path.join(directory, 'data_publications.csv'), index=False)
+            self.organization_df.to_csv(os.path.join(directory, 'organization_df.csv'), index=False)
+            self.legal_basis_df.to_csv(os.path.join(directory, 'legal_basis_df.csv'), index=False)
+            self.topics_df.to_csv(os.path.join(directory, 'topics_df.csv'), index=False)
+            self.sci_voc_df.to_csv(os.path.join(directory, 'sci_voc_df.csv'), index=False)
+            self.web_items_df.to_csv(os.path.join(directory, 'web_items_df.csv'), index=False)
+            self.web_link_df.to_csv(os.path.join(directory, 'web_link_df.csv'), index=False)
+
+    def export_to_db_schema(self, directory):
+        """
+        Export all enriched tables to match the final database schema.
+        Produces CSVs:
+        - projects.csv
+        - topics.csv
+        - project_topics.csv
+        - legal_basis.csv
+        - project_legal_basis.csv
+        - organizations.csv
+        - project_organizations.csv
+        - deliverables.csv
+        - publications.csv
+        - sci_voc.csv
+        - project_sci_voc.csv
+        - web_items.csv
+        - web_links.csv
+        """
+        out = directory
+        os.makedirs(out, exist_ok=True)
+
+        # 1) projects
+        proj = self.project_df.copy()
+        print("Exporting projects to CSV...")
+        print(f"  - {len(proj)} projects found")
+        #print columns of the project dataframe
+        print(f"  - Columns: {', '.join(proj.columns)}")
+        proj = proj.rename(columns={
+            'startDate': 'start_date',
+            'endDate': 'end_date',
+            'totalCost': 'total_cost',
+            'ecMaxContribution': 'ec_max_contribution',
+            'ecSignatureDate': 'ec_signature_date',
+            'contentUpdateDate': 'content_update_date',
+            'grantDoi': 'grant_doi',
+            'frameworkProgramme': 'framework_programme',
+            'masterCall': 'master_call',
+            'subCall': 'sub_call',
+            'fundingScheme': 'funding_scheme',
+            'nature': 'nature',
+            'objective': 'objective',
+            'rcn': 'rcn',
+            'grantDoi': 'grant_doi',
+            'ecContribution_per_year': 'ec_contribution_per_year',
+            'totalCost_per_year': 'total_cost_per_year',
+            'subfield' : 'sub_field',
+            
+        })
+        keep = [
+            'id', 'acronym', 'status', 'title',
+            'start_date', 'end_date', 'total_cost', 'ec_max_contribution', 'ec_signature_date',
+            'framework_programme', 'master_call', 'sub_call', 'funding_scheme', 'nature', 'objective', 'content_update_date',
+            'rcn', 'grant_doi',
+            'duration_days', 'duration_months', 'duration_years',
+            'n_institutions', 'coordinator_name',
+            'ec_contribution_per_year', 'total_cost_per_year',
+            'field_class', 'field', 'sub_field', 'niche',
+        ]
+        proj[keep].to_csv(os.path.join(out, 'projects.csv'), index=False)
+
+        # 2) topics & project_topics
+        topics = self.topics_df.rename(columns={'projectID':'project_id', 'topic':'code'})
+        dim_topics = topics[['code','title']].drop_duplicates()
+        dim_topics.to_csv(os.path.join(out, 'topics.csv'), index=False)
+        proj_topics = topics[['project_id','code']].drop_duplicates()
+        # rename code to topic_code
+        proj_topics = proj_topics.rename(columns={'code':'topic_code'})
+        proj_topics.to_csv(os.path.join(out, 'project_topics.csv'), index=False)
+
+        # 3) legal_basis & project_legal_basis
+        lb = self.legal_basis_df.rename(columns={'projectID':'project_id','legalBasis':'code'})
+        dim_lb = lb[['code','title','uniqueProgrammePart']].drop_duplicates()
+        # rename uniqueProgrammePart to unique_programme_part
+        dim_lb = dim_lb.rename(columns={'uniqueProgrammePart':'unique_programme_part'})
+        
+        dim_lb.to_csv(os.path.join(out, 'legal_basis.csv'), index=False)
+        
+        
+        proj_lb = lb[['project_id','code']].drop_duplicates()
+        # rename code to legal_basis_code
+        proj_lb = proj_lb.rename(columns={'code':'legal_basis_code'})
+        proj_lb.to_csv(os.path.join(out, 'project_legal_basis.csv'), index=False)
+
+        # 4) organizations & project_organizations
+        print("Exporting organizations and project_organizations to CSV...")
+        print(f"  - {len(self.organization_df)} organizations found")
+        print(f"  - Columns: {', '.join(self.organization_df.columns)}")
+        
+        # 4) organizations & project_organizations
+        org = self.organization_df.rename(columns={
+            'organisationID':'id',
+            'projectID':'project_id',
+            'SME':'sme',
+            'shortName':'short_name',
+            'vatNumber':'vat_number',
+            'activityType':'activity_type',
+            'street':'street',
+            'postCode':'post_code',
+            'city':'city',
+            'country':'country',
+            'nutsCode':'nuts_code',
+            'geolocation':'geolocation',
+            'organizationURL':'organization_url',
+            'contactForm':'contact_form',
+            'contentUpdateDate':'content_update_date',
+            'grantDoi':'grant_doi',
+        })
+        dim_org = org[['id','name','short_name','vat_number','sme','activity_type',
+                       'street','post_code','city','country','nuts_code','geolocation',
+                       'organization_url','contact_form','content_update_date']].drop_duplicates()
+        dim_org.to_csv(os.path.join(out, 'organizations.csv'), index=False)
+
+        proj_org = org.rename(columns={
+            'order':'order_index',
+            'ecContribution':'ec_contribution',
+            'netEcContribution':'net_ec_contribution',
+            'totalCost':'total_cost',
+            'endOfParticipation':'end_of_participation'
+        })
+        link_cols = ['project_id','id','role','order_index','ec_contribution','net_ec_contribution',
+                     'total_cost','end_of_participation','active']
+        proj_org = proj_org[link_cols].rename(columns={'id':'organization_id'})
+        proj_org.to_csv(os.path.join(out, 'project_organizations.csv'), index=False)
+        
+        
+        
+        # 5) deliverables
+        print("Exporting deliverables to CSV...")
+        print(f"  - {len(self.data_deliverables)} deliverables found")
+        print(f"  - Columns: {', '.join(self.data_deliverables.columns)}")
+        # Rename columns and select relevant ones
+        
+        
+        deliv = self.data_deliverables.rename(columns={
+            'projectID':'project_id',
+            'deliverableID':'id',
+            'deliverableType':'deliverable_type',
+            'contentUpdateDate':'content_update_date',
+            'contentupdatedate':'content_update_date'
+        })
+        deliv_cols = ['id','project_id','title','deliverable_type','description','url','collection','content_update_date']
+        deliv[deliv_cols].to_csv(os.path.join(out, 'deliverables.csv'), index=False)
+
+
+
+        # 6) publications
+        pubs = self.data_publications.rename(columns={
+            'projectID':'project_id','publicationID':'id','isPublishedAs':'is_published_as',
+            'journalTitle':'journal_title','journalNumber':'journal_number',
+            'publishedYear':'published_year','publishedPages':'published_pages',
+            'contentUpdateDate':'content_update_date'
+        })
+        pub_cols = ['id','project_id','title','is_published_as','authors','journal_title','journal_number',
+                    'published_year','published_pages','issn','isbn','doi','collection','content_update_date']
+        pubs[pub_cols].to_csv(os.path.join(out, 'publications.csv'), index=False)
+
+        # 7) sci_voc & project_sci_voc
+        sci = self.sci_voc_df.rename(columns={
+            'euroSciVocCode':'code','euroSciVocPath':'path',
+            'euroSciVocTitle':'title','euroSciVocDescription':'description'
+        })
+        dim_sci = sci[['code','path','title','description']].drop_duplicates()
+        dim_sci.to_csv(os.path.join(out, 'sci_voc.csv'), index=False)
+        proj_sci = sci.rename(columns={'projectID':'project_id'})[['project_id','code']].drop_duplicates()
+        # rename code to sci_voc_code
+        proj_sci = proj_sci.rename(columns={'code':'sci_voc_code'})
+        proj_sci.to_csv(os.path.join(out, 'project_sci_voc.csv'), index=False)
+
+        # 8) web_items
+        print("Exporting web items to CSV...")
+        print(f"  - {len(self.web_items_df)} web items found")
+        print(f"  - Columns: {', '.join(self.web_items_df.columns)}")
+        # Rename columns and select relevant ones
+        wi = self.web_items_df.rename(columns={'represents':'project_id','availableLanguages':'available_languages'})
+        wi[['language','available_languages','uri','title','type','source','project_id']].to_csv(os.path.join(out, 'web_items.csv'), index=False)
+
+        # 9) web_links
+        print("Exporting web links to CSV...")
+        print(f"  - {len(self.web_link_df)} web links found")
+        print(f"  - Columns: {', '.join(self.web_link_df.columns)}")
+        wl = self.web_link_df.rename(columns={
+            'projectID':'project_id',
+            'physUrl':'phys_url',
+            'availableLanguages':'available_languages',
+            'archivedDate':'archived_date'
+        })
+        web_link_cols = ['id','project_id','phys_url','available_languages','status','archived_date','type','source','represents']
+        wl[web_link_cols].to_csv(os.path.join(out, 'web_links.csv'), index=False)
+
+        print(f"✅ All tables exported to {out}")
 
     def export_dataframes(self, directory, format='csv', include_all=False):
         """
@@ -281,11 +553,11 @@ class CORDIS_data():
         _save(self.project_df, "project_df")
 
         if include_all:
-            _save(self.data_deliverables, "data_deliverables")
-            _save(self.data_publications, "data_publications")
-            _save(self.organization_df, "organization_df")
-            _save(self.legal_basis_df, "legal_basis_df")
-            _save(self.topics_df, "topics_df")
-            _save(self.sci_voc_df, "sci_voc_df")
-            _save(self.web_items_df, "web_items_df")
-            _save(self.web_link_df, "web_link_df")
+            _save(self.data_deliverables, "data_deliverables_v2")
+            _save(self.data_publications, "data_publications_v2")
+            _save(self.organization_df, "organization_df_v2")
+            _save(self.legal_basis_df, "legal_basis_df_v2")
+            _save(self.topics_df, "topics_df_v2")
+            _save(self.sci_voc_df, "sci_voc_df_v2")
+            _save(self.web_items_df, "web_items_df_v2")
+            _save(self.web_link_df, "web_link_df_v2")

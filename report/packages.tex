@@ -1,0 +1,42 @@
+% Pakketten ----------------------------------------
+
+\usepackage[utf8]{inputenc}
+\usepackage[dutch]{babel}
+\usepackage{tgpagella}  % Lettertype
+
+% \usepackage{bookmark}
+\usepackage{graphicx} % Figuren
+\usepackage{float}
+% \usepackage{subfigure} % Meerdere figuren
+\usepackage{wrapfig}
+\usepackage{array} % Nodig voor bepaalde tabellen
+\usepackage{longtable} % Voor multipage tabellen
+\usepackage{enumitem}
+\usepackage{subcaption}
+\usepackage[margin=2cm]{geometry}
+\usepackage{amsmath}
+\usepackage{tcolorbox}
+\usepackage{amssymb}
+\usepackage{tabularx}
+\usepackage{amsthm}
+\usepackage{braket}
+\usepackage{bookmark}
+\usepackage{siunitx} % Eenheden
+\usepackage{arydshln} % Stippelijn in tabellen
+\usepackage{csquotes} % Citeren
+\usepackage[parfill]{parskip} 
+
+\usepackage{titlesec} % Stijl van hoofdstuktitels aanpassen
+\titleformat{\chapter}
+  {\large\uppercase}
+  {\thechapter}{1em}{}
+  [{\vspace{8pt}\titlerule[0.4pt]}]
+
+\usepackage[style=numeric, sorting=none]{biblatex}
+\setlength\bibitemsep{0.7\baselineskip}
+\addbibresource{referenties.bib} 
+
+
+% Commando's ---------------------------------------
+
+\def\headline#1{\hbox to \hsize{\hrulefill\quad\lower.3em\hbox{#1}\quad\hrulefill}}

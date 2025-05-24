@@ -83,8 +83,8 @@ def clean_project(df: pd.DataFrame) -> pd.DataFrame:
     df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
     # standardize columns
 
-    if 'start_date' in df: df['start_date'] = clean_date_column(df['start_date'])
-    if 'end_date' in df: df['end_date'] = clean_date_column(df['end_date'])
+    if 'startDate' in df: df['startDate'] = clean_date_column(df['startDate'])
+    if 'endDate' in df: df['endDate'] = clean_date_column(df['endDate'])
     # Numeric
     for col in ['total_cost', 'ec_contribution', 'budget', 'id']:
         if col in df: df[col] = clean_numeric_column(df[col])
@@ -106,92 +106,52 @@ def clean_project(df: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 def clean_organization(df: pd.DataFrame) -> pd.DataFrame:
+    df = standardize_columns(df)
 
+    # Ensure critical columns exist
+    for col in ['id', 'project_id']:
+        if col not in df.columns:
+            df[col] = np.nan
+
+    # Drop rows with missing or empty ID
+    before = len(df)
+    df = df[df['id'].notnull() & (df['id'].astype(str).str.strip() != "")]
+    after = len(df)
+    if before != after:
+        print(f"Dropped {before - after} rows with missing organization ID.")
+
+    # Rename for consistency
     rename_map = {
-        'projectid': 'project_id',
-        'organisationid': 'organization_id',
-        'neteccontribution': 'net_ec_contribution',
-        'totalcost': 'total_cost',
-        'endofparticipation': 'end_of_participation',
+        'vatnumber': 'vat_number',
+        'shortname': 'short_name',
+        'sme': 'sme',
+        'activitytype': 'activity_type',
+        'nutscode': 'nuts_code',
+        'organizationurl': 'organization_url',
+        'contentupdatedate': 'content_update_date'
     }
-    df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
-    # Numeric
-    for col in ['net_ec_contribution', 'total_cost']:
-        if col in df: 
-            df[col] = clean_numeric_column(df[col])
+    df = df.rename(columns=rename_map)
 
-    # standradize dates
-    if 'end_of_participation' in df: 
-        df['end_of_participation'] = clean_date_column(df['end_of_participation'])
+    # Fill missing values
+    defaults = {
+        'short_name': 'XX', 'vat_number': 'XX000000000', 'sme': 'XX',
+        'activity_type': 'XX', 'street': 'XX', 'city': 'XX', 'country': 'XX',
+        'nuts_code': 'XX', 'geolocation': 'XX', 'organization_url': 'about:blank',
+        'ec_contribution': 0.0, 'net_ec_contribution': 0.0, 'total_cost': 0.0
+    }
+    for col, val in defaults.items():
+        if col in df.columns:
+            df[col] = df[col].fillna(val)
 
-    # Remove empty org/project ids
-    for k in ['organization_id', 'project_id']:
-        if k in df: df = df[df[k].notna() & (df[k] != '')]
+    # Parse dates
+    if 'content_update_date' in df.columns:
+        df['content_update_date'] = clean_date_column(df['content_update_date'])
 
+    # Remove dups
+    df = df.drop_duplicates(subset='id')
 
-
-    df['vatNumber'] = df['vatNumber'].fillna('XX000000000')
-    df['shortName'] = df['shortName'].fillna('XX')
-    df['SME'] = df['SME'].fillna('XX')
-    df['activityType'] = df['activityType'].fillna('XX')
-    df['street'] = df['street'].fillna('XX')
-    df['city'] = df['city'].fillna('XX')
-
-    # set correct country values
-    df.loc[df['city']=='Windhoek', 'country']='NA' # NA was probably interpreted as NaN, can also be fixed using keep_default_na=True when loading data
-    df.loc[df['city']=='WINDHOEK', 'country']='NA'
-    df.loc[df['city']=='Crawley', 'country']='UK'
-    df.loc[df['name']=='CEREGE', 'country']='FR'
-    df.loc[df['name']=='Purdue University', 'country']='US'
-    df.loc[df['name']=='Rijk Zwaan', 'country']='NL'
-    df['nutsCode'] = df['nutsCode'].fillna('XX')
-
-    # Try to find geolocation from city
-
-    df['geolocation'] = df['geolocation'].fillna('XX')
-
-    df['organizationURL'] = df['organizationURL'].fillna('about:blank')
-    df['ecContribution'] = df['ecContribution'].fillna(0.0)
-    df['netEcContribution'] = df['netEcContribution'].fillna(0.0)
-
-    df['totalCost'] = df['totalCost'].fillna(0.0)
-
-    # get status from project_df dataframe
-    # Merge project_df (with 'id') into organization_df (with 'projectID')
-    # load project_df
-    # get project root
-    
-
-# Assuming this script is somewhere inside your project directory
-    project_root = Path(__file__).resolve().parent.parent.parent  # adjust `.parent` levels if needed
-    csv_path = project_root / 'data' / 'raw' / 'project.csv'
-    project_df = robust_csv_reader(str(csv_path))
-    project_df['status'] = project_df['status'].astype(str).str.encode('unicode_escape').str.decode('utf-8').str.strip()
-    
-    ###### OLD METHOD ######
-    # org_with_status = df.merge(
-    #     project_df[['id', 'status']],
-    #     left_on='projectID',
-    #     right_on='id',
-    #     how='left'
-    # )
-
-    # # from etl.cleaning import 
-    # # Set 'active' to True if status is SIGNED, else False
-    # org_with_status['active'] = str(org_with_status['status'].astype(str).str.encode('unicode_escape').str.decode('utf-8').str.strip()) == 'SIGNED'
-
-    # org_with_status = org_with_status.drop(columns=['id', 'status'])
-
-    ###### NEW METHOD ######
-    # Create a mapping from project_df id to status
-    status_map = project_df.set_index('id')['status']
-
-    # Map the status to organization_df and check if it's SIGNED
-    df['active'] = df['projectID'].map(status_map) == 'SIGNED'
-    # De-duplication
-    if 'organizationID' in df and 'projectID' in df:
-        df = df.drop_duplicates(subset=['organizationID', 'projectID'])
     return df.reset_index(drop=True)
+
 
 def clean_topics(df: pd.DataFrame) -> pd.DataFrame:
     df = standardize_columns(df)
