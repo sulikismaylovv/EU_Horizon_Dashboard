@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "plotly.js": "^3.0.1",
+    "react-plotly.js": "^2.6.0",
+    "shadcn-ui": "^0.9.5",
+    "tailwindcss": "^4.1.7"
+  },
+  "devDependencies": {
+    "@types/react-plotly.js": "^2.6.3"
+  }
+}
