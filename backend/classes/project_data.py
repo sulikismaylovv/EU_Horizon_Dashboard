@@ -25,8 +25,7 @@ class Project_data(CORDIS_data):
     Class is initialized with project id or project acronym. 
 
     TODO:
-    - add method to 
-    
+    - Rewrite complete class to use processed datasets with the latest variable names and formats
     """
 
     def __init__(self,
@@ -51,13 +50,15 @@ class Project_data(CORDIS_data):
         self.id, self.acronym = self._resolve_project_id_acronym(project_id, acronym)
 
         # 4) build your per-project views
-        self.project_info      = self._get_project_info()
+        self.project_info      = self._get_project_info() 
         self.publications      = self._get_publications()
         self.deliverables      = self._get_deliverables()
         self.organizations     = self._get_organizations()
-        self.scivoc            = self._get_scivoc()
-        self.topics            = self._get_topics()
-        self.legal_basis       = self._get_legal_basis()
+
+        # the following are not used for the supabase migration I think
+        # self.scivoc            = self._get_scivoc()
+        # self.topics            = self._get_topics()
+        # self.legal_basis       = self._get_legal_basis()
 
         # 5) compute your summaries
         self.temporal_features    = self._compute_temporal_features()
@@ -79,33 +80,42 @@ class Project_data(CORDIS_data):
         return project_id, acronym
 
     def _get_project_info(self):
-        return self.project_df[self.project_df['id'] == self.id].iloc[0].to_dict()
-
+        columns = [
+            "status", "title", "start_date", "end_date", "total_cost", "ec_max_contribution", "ec_signature_date",
+            "framework_programme", "master_call", "sub_call", "funding_scheme", "nature", "objective", "content_update_date",
+            "rcn", "grant_doi", "duration_days", "duration_months", "duration_years", "n_institutions", "coordinator_name",
+            "ec_contribution_per_year", "total_cost_per_year", "field_class", "field", "sub_field", "niche"
+        ]
+        project_info = {}
+        for col in columns:
+            setattr(self, col, self.project_df[col].unique().tolist())
+            project_info[col] =self.project_df[col].unique().tolist()
+        return project_info
+    
     def _get_publications(self):
-        return self.data_publications[self.data_publications['projectID'] == self.id]
+        return self.data_publications[self.data_publications['project_id'] == self.id]
 
     def _get_deliverables(self):
-        return self.data_deliverables[self.data_deliverables['projectID'] == self.id]
+        return self.data_deliverables[self.data_deliverables['project_id'] == self.id]
 
     def _get_organizations(self):
-        return self.organization_df[self.organization_df['projectID'] == self.id]
+        return self.organization_df[self.organization_df['project_id'] == self.id]
 
     def _get_scivoc(self):
-        return self.sci_voc_df[self.sci_voc_df['projectID'] == self.id]
+        return self.sci_voc_df[self.sci_voc_df['project_id'] == self.id]
 
     def _get_topics(self):
-        return self.topics_df[self.topics_df['projectID'] == self.id]
+        return self.topics_df[self.topics_df['project_id'] == self.id]
 
     def _get_legal_basis(self):
-        return self.legal_basis_df[self.legal_basis_df['projectID'] == self.id]
+        return self.legal_basis_df[self.legal_basis_df['project_id'] == self.id]
     
-
     # Add additional project features
     def _compute_temporal_features(self):
         fmt = "%Y-%m-%d"
-        start = self.project_info.get("startDate", None)
-        end = self.project_info.get("endDate", None)
-        ec_sig = self.project_info.get("ecSignatureDate", None)
+        start = self.project_info.get("start_date", None)
+        end = self.project_info.get("end_date", None)
+        ec_sig = self.project_info.get("ec_signature_date", None)
 
         try:
             start_date = datetime.strptime(start, fmt)
@@ -126,8 +136,13 @@ class Project_data(CORDIS_data):
         if orgs.empty:
             return {}
         country_counts = orgs["country"].value_counts().to_dict()
-        activity_types = orgs["activityType"].value_counts().to_dict()
-        n_partners = orgs["organisationID"].nunique()
+        activity_types = orgs["activity_type"].value_counts().to_dict()
+        n_partners = orgs["organisation_id"].nunique()
+
+        # add to self
+        self.n_partners = n_partners
+        self.countries = country_counts
+        self.activity_types = activity_types
 
         return {
             "n_partners": n_partners,
@@ -136,10 +151,10 @@ class Project_data(CORDIS_data):
         }
 
     def _compute_financial_metrics(self):
-        ec_total = self.project_info.get("ecMaxContribution", None)
-        total_cost = self.project_info.get("totalCost", None)
-        ec_partner_sum = self.organizations["ecContribution"].sum()
-        cost_partner_sum = self.organizations["totalCost"].sum()
+        ec_total = self.project_info.get("ec_max_contribution", None)
+        total_cost = self.project_info.get("total_cost", None)
+        ec_partner_sum = self.organizations["ec_contribution"].sum()
+        cost_partner_sum = self.organizations["total_cost"].sum()
 
         try:
             ec_per_deliverable = ec_total / len(self.deliverables)
@@ -151,6 +166,15 @@ class Project_data(CORDIS_data):
         except:
             ec_per_publication = None
 
+        # Add these to self
+        self.ec_total = ec_total
+        self.total_cost = total_cost
+        self.ec_sum_from_partners = ec_partner_sum
+        self.cost_sum_from_partners = cost_partner_sum
+        self.ec_per_deliverable = ec_per_deliverable
+        self.ec_per_publication = ec_per_publication
+
+        # return metrics as a dictionary
         return {
             "ec_total": ec_total,
             "total_cost": total_cost,
@@ -166,6 +190,12 @@ class Project_data(CORDIS_data):
 
         pub_types = self.publications['isPublishedAs'].value_counts().to_dict()
         deliverable_types = self.deliverables['deliverableType'].value_counts().to_dict()
+
+        # Add these to self
+        self.scivoc_keywords = scivoc_titles
+        self.topic_keywords = topic_titles
+        self.publication_types = pub_types
+        self.deliverable_types = deliverable_types
 
         return {
             "scivoc_keywords": scivoc_titles,
@@ -200,7 +230,7 @@ class Project_data(CORDIS_data):
         pprint(getattr(self, 'publications', {}), indent=4)
 
         print("\nDeliverables:")
-        pprint(getattr(self, 'deliverables', {})[['deliverableType', 'description']], indent=4)
+        pprint(getattr(self, 'deliverables', {})[['deliverable_type', 'description']], indent=4)
 
         print("\nInstitutions / Organizations:")
         pprint(getattr(self, 'organizations', []), indent=4)
@@ -236,3 +266,9 @@ class Project_data(CORDIS_data):
 
         print("\nWeb Links:")
         pprint(getattr(self, 'web_links', []), indent=4)
+
+    def get_publications(self):
+        """
+        Returns a DataFrame of all publications related to the project.
+        """
+        return self.publications
