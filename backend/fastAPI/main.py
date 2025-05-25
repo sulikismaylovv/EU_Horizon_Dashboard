@@ -40,6 +40,19 @@ app.add_middleware(
 
 
 # --- Pydantic Models ---
+class ProjectOrganizationBase(BaseModel):
+
+    project_id: int
+    organization_id: int
+    role: Optional[str] = None
+    order_index: Optional[int] = None
+    ec_contribution: Optional[float] = None
+    net_ec_contribution: Optional[float] = None
+    total_cost: Optional[float] = None
+    end_of_participation: Optional[bool] = None
+    active: Optional[bool] = None
+
+
 class Project(BaseModel):
     id: int
     acronym: str
@@ -109,7 +122,6 @@ async def read_root():
     return {"message": "Hello from FastAPI! CORS is enabled."}
 
 
-# --- FastAPI Endpoints ---
 @app.get("/projects", response_model=List[Project], tags=["Projects"])
 async def get_projects():
     """
@@ -235,6 +247,281 @@ METRICS_LIST_SUNBURST = [
     'duration_years', 'n_institutions'
 ]
 MAX_SUNBURST_LEVEL = 4 # Corresponds to path_lvl_0 to path_lvl_4
+
+class EcByCountryData(BaseModel):
+    country: str
+    ec_contribution: Optional[float] = None
+
+# Ensure Query is imported:
+# from fastapi import FastAPI, HTTPException, Query, ...
+# ... other imports ...
+# import pandas as pd
+
+# Add this Pydantic model with your other models
+class InstitutionFunding(BaseModel):
+    name: str
+    ec_contribution: Optional[float] = None
+
+    @validator('ec_contribution', pre=True)
+    def parse_numeric_ec_contribution(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                return float(value)
+            except ValueError:
+                return None # Or raise an error, or handle as appropriate
+        return value
+
+# Add this new endpoint function with your other FastAPI endpoints
+@app.get("/analytics/top-institutions-by-funding", response_model=List[InstitutionFunding], tags=["Analytics"])
+async def get_top_institutions_by_funding(
+    top_n: int = Query(15, gt=0, description="The number of top institutions to return.")
+):
+    """
+    Calculates and returns the top N institutions by total EC contribution.
+    """
+    try:
+        # 1. Fetch project_organizations data (organization_id, ec_contribution)
+        po_response = supabase.table("project_organizations").select("organization_id, ec_contribution").execute()
+        po_data = po_response.data
+        if not po_data:
+            po_data = []
+
+        # 2. Fetch organizations data (id, name)
+        # Assuming 'organizations' table has 'id' and 'name' columns
+        org_response = supabase.table("organizations").select("id, name").execute() # 'name' is the institution name
+        org_data = org_response.data
+        if not org_data:
+            org_data = []
+
+        if not po_data: # If there's no project_organization data, no contributions to aggregate
+            return []
+
+        # Convert to Pandas DataFrames
+        po_df = pd.DataFrame(po_data)
+        org_df = pd.DataFrame(org_data)
+
+        # Ensure 'ec_contribution' is numeric and handle potential errors/None values
+        if 'ec_contribution' in po_df.columns:
+            po_df['ec_contribution'] = pd.to_numeric(po_df['ec_contribution'], errors='coerce').fillna(0.0)
+        else:
+            po_df['ec_contribution'] = 0.0 # If column is missing, contributions are zero
+
+        if org_df.empty: # If no organization data, we can't map to institution names
+            if not po_df.empty:
+                # Sum all EC contributions under 'Unknown Institution'
+                total_ec_unknown = po_df['ec_contribution'].sum()
+                if total_ec_unknown > 0: # Only return if there's some contribution
+                     return [{"name": "Unknown Institution", "ec_contribution": total_ec_unknown}]
+            return []
+        
+        # Ensure org_df has 'id' and 'name' columns
+        if 'id' not in org_df.columns or 'name' not in org_df.columns:
+            # Essential columns missing from organizations table for this logic
+             if not po_df.empty:
+                total_ec_unknown = po_df['ec_contribution'].sum()
+                if total_ec_unknown > 0:
+                     return [{"name": "Unknown Institution (Org data missing)", "ec_contribution": total_ec_unknown}]
+             return []
+
+
+        # 3. Merge dataframes
+        merged_df = pd.merge(
+            po_df,
+            org_df,
+            left_on='organization_id',
+            right_on='id',
+            how='left'
+        )
+
+        # Handle cases where institution name might be NaN (e.g., organization not found or name is null)
+        if 'name' in merged_df.columns:
+            merged_df['name'] = merged_df['name'].fillna('Unknown Institution')
+        else:
+            # This case should ideally be caught by the org_df check above,
+            # but as a fallback:
+            merged_df['name'] = 'Unknown Institution'
+
+        # 4. Group by institution name and sum ec_contribution
+        institution_funding_df = merged_df.groupby('name', as_index=False)['ec_contribution'].sum()
+
+        # 5. Sort values by ec_contribution in descending order and take top N
+        institution_funding_df = institution_funding_df.sort_values('ec_contribution', ascending=False).head(top_n)
+
+        # 6. Convert DataFrame to list of dictionaries
+        result = institution_funding_df.to_dict(orient='records')
+        
+        return result
+
+    except Exception as e:
+        print(f"Error calculating top institutions by funding: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"An error occurred calculating top institutions by funding: {str(e)}")
+
+# Add this Pydantic model with your other models
+class ProjectsByCountryData(BaseModel):
+    country: str
+    project_count: int
+
+# Add this new endpoint function with your other FastAPI endpoints
+@app.get("/analytics/projects-by-country", response_model=List[ProjectsByCountryData], tags=["Analytics"])
+async def get_projects_per_country():
+    """
+    Calculates and returns the number of unique projects per country.
+    This data is suitable for a bar chart.
+    """
+    try:
+        # 1. Fetch project_organizations data (only necessary columns)
+        po_response = supabase.table("project_organizations").select("project_id, organization_id, ec_contribution").execute() # ec_contribution not strictly needed here but often fetched together
+        po_data = po_response.data
+        if not po_data:
+            po_data = []
+
+        # 2. Fetch organizations data (only necessary columns: id and country)
+        org_response = supabase.table("organizations").select("id, country").execute()
+        org_data = org_response.data
+        if not org_data:
+            org_data = []
+
+        if not po_data: # If there's no project_organization data, no projects to count per country
+            return []
+
+        # Convert to Pandas DataFrames
+        po_df = pd.DataFrame(po_data)
+        org_df = pd.DataFrame(org_data)
+        
+        # Ensure po_df has 'project_id' and 'organization_id'
+        if 'project_id' not in po_df.columns or 'organization_id' not in po_df.columns:
+            # This case means essential data is missing from project_organizations fetch
+            # or the table itself.
+            return []
+
+
+        if org_df.empty: # If no organization data, we can't map to countries
+            if not po_df.empty and 'project_id' in po_df.columns:
+                # Count all unique projects under 'Unknown' country
+                project_count_unknown_country = po_df['project_id'].nunique()
+                return [{"country": "Unknown", "project_count": project_count_unknown_country}]
+            return []
+
+        # 3. Merge dataframes
+        # project_organizations.organization_id links to organizations.id
+        merged_df = pd.merge(
+            po_df,
+            org_df,
+            left_on='organization_id',
+            right_on='id',
+            how='left'
+        )
+
+        # Handle cases where country might be NaN
+        if 'country' in merged_df.columns:
+            merged_df['country'] = merged_df['country'].fillna('Unknown')
+        else:
+            merged_df['country'] = 'Unknown' # If 'country' column missing from org_df or merge
+
+        # 4. Group by country and count unique project_ids
+        # The .nunique() method on a grouped series returns a series,
+        # so we reset_index to turn it into a DataFrame.
+        # Or use as_index=False in groupby and then rename.
+        projects_by_country_df = merged_df.groupby('country', as_index=False)['project_id'].nunique()
+        
+        # 5. Rename the column containing unique project counts
+        projects_by_country_df = projects_by_country_df.rename(columns={'project_id': 'project_count'})
+
+        # 6. Sort values by project_count in descending order
+        projects_by_country_df = projects_by_country_df.sort_values('project_count', ascending=False)
+
+        # 7. Convert DataFrame to list of dictionaries
+        result = projects_by_country_df.to_dict(orient='records')
+        
+        return result
+
+    except Exception as e:
+        print(f"Error calculating projects per country: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"An error occurred calculating projects per country: {str(e)}")
+
+@app.get("/analytics/ec-by-country", response_model=List[EcByCountryData], tags=["Analytics"])
+async def get_ec_contribution_by_country():
+    """
+    Calculates and returns the total EC contribution by country.
+    This data is suitable for a bar chart.
+    """
+    try:
+        # 1. Fetch project_organizations data (only necessary columns)
+        po_response = supabase.table("project_organizations").select("organization_id, ec_contribution").execute()
+        po_data = po_response.data
+        if not po_data:
+            po_data = [] # Ensure po_df can be created if no data
+
+        # 2. Fetch organizations data (only necessary columns: id and country)
+        # Assuming 'organizations' table has 'id' and 'country' columns
+        org_response = supabase.table("organizations").select("id, country").execute()
+        org_data = org_response.data
+        if not org_data:
+            org_data = [] # Ensure org_df can be created if no data
+
+        if not po_data: # If there's no project_organization data, no contributions to aggregate
+            return []
+
+        # Convert to Pandas DataFrames
+        po_df = pd.DataFrame(po_data)
+        org_df = pd.DataFrame(org_data)
+
+        # Ensure 'ec_contribution' is numeric and handle potential errors/None values
+        if 'ec_contribution' in po_df.columns:
+            po_df['ec_contribution'] = pd.to_numeric(po_df['ec_contribution'], errors='coerce').fillna(0.0)
+        else:
+            # If 'ec_contribution' column doesn't exist, treat all contributions as 0
+            po_df['ec_contribution'] = 0.0
+        
+        if org_df.empty: # If no organization data, we can't map to countries
+            # Option 1: Return sum under 'Unknown' country if po_df has data
+            if not po_df.empty:
+                total_ec_unknown_country = po_df['ec_contribution'].sum()
+                return [{"country": "Unknown", "ec_contribution": total_ec_unknown_country}]
+            # Option 2: Return empty list
+            return []
+
+
+        # 3. Merge dataframes
+        # project_organizations.organization_id links to organizations.id
+        merged_df = pd.merge(
+            po_df,
+            org_df,
+            left_on='organization_id',
+            right_on='id',
+            how='left'
+        )
+
+        # Handle cases where country might be NaN (e.g., organization not found in org_df or country is null)
+        if 'country' in merged_df.columns:
+            merged_df['country'] = merged_df['country'].fillna('Unknown')
+        else:
+            # If 'country' column doesn't exist after merge (e.g. org_df was empty or had no 'country' column)
+            merged_df['country'] = 'Unknown'
+
+
+        # 4. Group by country and sum ec_contribution
+        ec_by_country_df = merged_df.groupby('country', as_index=False)['ec_contribution'].sum()
+
+        # 5. Sort values by ec_contribution in descending order
+        ec_by_country_df = ec_by_country_df.sort_values('ec_contribution', ascending=False)
+
+        # 6. Convert DataFrame to list of dictionaries (Pydantic model will validate this structure)
+        result = ec_by_country_df.to_dict(orient='records')
+        
+        return result
+
+    except Exception as e:
+        print(f"Error calculating EC contribution by country: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"An error occurred calculating EC contribution by country: {str(e)}")
 
 
 @app.get("/projects/analytics/sunburst", response_model=SunburstChartData, tags=["Analytics"])
@@ -381,3 +668,122 @@ async def get_sunburst_data(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"An error occurred generating sunburst data: {str(e)}")
 
+
+
+
+# --- FastAPI Endpoints (Add the new one) ---
+
+@app.get("/")
+async def read_root():
+    return {"message": "Hello from FastAPI! CORS is enabled."}
+
+# Placeholder for existing endpoints like /projects, /project/{project_id}, /projects/analytics,
+# /projects/analytics/sunburst, /analytics/ec-by-country, /analytics/projects-by-country,
+# /analytics/top-institutions-by-funding if you are adding to the same main.py
+
+# Add these Pydantic models with your other models
+class CountryFundingItem(BaseModel):
+    country: str  # Country name or code, as it appears in your 'organizations' table
+    funding: Optional[float]
+
+class FundingByCountryResponse(BaseModel):
+    chart_title: str = "Total EC Contribution by Country"
+    color_axis_label: str = "EC Contribution (EUR)"
+    data: List[CountryFundingItem]
+    notes: Optional[str] = "Country codes/names are used as available in the organizations table. Funding represents the sum of EC contributions."
+
+# Add this new endpoint function with your other FastAPI endpoints
+@app.get("/projects/analytics/funding-by-country", response_model=FundingByCountryResponse, tags=["Analytics"])
+async def get_funding_by_country_data():
+    """
+    Fetches data for a choropleth map of total EC funding by country.
+    It sums EC contributions from the project_organizations table,
+    grouping by country obtained from the organizations table.
+    This endpoint does not convert country codes to ISO-3; it uses them as is.
+    """
+    try:
+        # 1. Fetch data from Supabase
+        # Fetch project_organizations (only relevant columns)
+        # The table definition confirms 'organization_id' and 'ec_contribution' exist.
+        po_response = supabase.table("project_organizations").select("organization_id, ec_contribution").execute()
+        po_data = po_response.data
+        if not po_data:
+            return FundingByCountryResponse(data=[], notes="No project organization data found.")
+
+        # Fetch organizations (only relevant columns: 'id' as PK, and 'country')
+        # Assuming 'organizations' table has 'id' and 'country' columns.
+        org_response = supabase.table("organizations").select("id, country").execute()
+        org_data = org_response.data
+        if not org_data:
+            return FundingByCountryResponse(data=[], notes="No organization data found.")
+
+        # 2. Convert to Pandas DataFrames
+        po_df = pd.DataFrame(po_data)
+        org_df = pd.DataFrame(org_data)
+
+        if po_df.empty or org_df.empty:
+             return FundingByCountryResponse(data=[], notes="Initial data for organizations or project participations is empty.")
+
+        # 3. Data Cleaning and Preparation
+        # Ensure 'ec_contribution' is numeric, coercing errors and filling NaN with 0
+        po_df['ec_contribution'] = pd.to_numeric(po_df['ec_contribution'], errors='coerce').fillna(0)
+        
+        # Ensure join keys 'organization_id' (from po_df) and 'id' (from org_df) are of compatible types.
+        # Supabase usually returns numeric types correctly. If issues arise, explicit casting like
+        # po_df['organization_id'] = po_df['organization_id'].astype(int)
+        # org_df['id'] = org_df['id'].astype(int)
+        # or converting both to str for merging can be done. For now, we assume direct compatibility.
+
+        # Filter out organizations with no country specified or empty country strings from org_df before merging
+        org_df = org_df.dropna(subset=['country'])
+        org_df = org_df[org_df['country'].astype(str).str.strip() != '']
+        
+        if org_df.empty:
+            return FundingByCountryResponse(data=[], notes="No organizations with valid country information found.")
+
+
+        # 4. Merge DataFrames
+        # Merge project organization data with organization data to get country information
+        merged_df = pd.merge(
+            po_df,
+            org_df,
+            left_on='organization_id',  # Foreign key in project_organizations
+            right_on='id',              # Primary key in organizations
+            how='left'                  # Use left merge to keep all project participations
+        )
+
+        # After merge, 'country' column from org_df is now in merged_df.
+        # If an organization_id from po_df doesn't exist in org_df, 'country' will be NaN for those rows.
+        # Filter out rows where 'country' is NaN (i.e., no matching organization or organization had no country)
+        merged_df = merged_df.dropna(subset=['country'])
+        
+        if merged_df.empty:
+            return FundingByCountryResponse(data=[], notes="No project participations could be mapped to a valid country.")
+            
+        # 5. Sum up ec_contribution by country
+        funding_by_country_sum = (
+            merged_df
+            .groupby('country', as_index=False)['ec_contribution']
+            .sum()
+            .rename(columns={'ec_contribution': 'funding'})
+        )
+        
+        # Optional: Filter out countries with zero or negligible funding
+        # funding_by_country_sum = funding_by_country_sum[funding_by_country_sum['funding'] > 0]
+
+        # 6. Format for response
+        response_data_items = [
+            CountryFundingItem(country=row['country'], funding=row['funding'])
+            for _, row in funding_by_country_sum.iterrows()
+        ]
+        
+        if not response_data_items:
+            return FundingByCountryResponse(data=[], notes="No funding data found after aggregation by country. This might occur if all mapped participations had zero EC contribution or other filtering criteria.")
+
+        return FundingByCountryResponse(data=response_data_items)
+
+    except Exception as e:
+        print(f"Error generating funding by country data: {e}") # Log the error
+        import traceback
+        traceback.print_exc() # Print full traceback for debugging
+        raise HTTPException(status_code=500, detail=f"An error occurred generating funding by country data: {str(e)}")

@@ -1,17 +1,20 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
-import App from './App';
 import reportWebVitals from './reportWebVitals';
 import Sunburst from './graphs/sunburst'; // Importing the sunburst component
+import TopInstitutionsBarChart from './graphs/InstitutionsByFunding';
+import ProjectsByCountryBarChart from './graphs/ProjectsByCountry'; // Importing the projects by country bar chart
+import EcByCountryBarChart from './graphs/EcByCountry';
 
-// import Sunburst from './sunburst'; // Importing the sunburst component
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
 );
 root.render(
   <React.StrictMode>
-    {/* <AxiosComponent /> */}
+    <EcByCountryBarChart />
+    <TopInstitutionsBarChart />
+    <ProjectsByCountryBarChart />
     <Sunburst />
   </React.StrictMode>
 );

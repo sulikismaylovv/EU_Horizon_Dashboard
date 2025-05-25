@@ -96,6 +96,90 @@ class CORDISPlots:
             labels={'ec_contribution':'EC Contribution (EUR)', 'name':'Institution'}
         )
 
+# Add this Pydantic model with your other models
+class ProjectsByCountryData(BaseModel):
+    country: str
+    project_count: int
+
+# Add this new endpoint function with your other FastAPI endpoints
+@app.get("/analytics/projects-by-country", response_model=List[ProjectsByCountryData], tags=["Analytics"])
+async def get_projects_per_country():
+    """
+    Calculates and returns the number of unique projects per country.
+    This data is suitable for a bar chart.
+    """
+    try:
+        # 1. Fetch project_organizations data (only necessary columns)
+        po_response = supabase.table("project_organizations").select("project_id, organization_id, ec_contribution").execute() # ec_contribution not strictly needed here but often fetched together
+        po_data = po_response.data
+        if not po_data:
+            po_data = []
+
+        # 2. Fetch organizations data (only necessary columns: id and country)
+        org_response = supabase.table("organizations").select("id, country").execute()
+        org_data = org_response.data
+        if not org_data:
+            org_data = []
+
+        if not po_data: # If there's no project_organization data, no projects to count per country
+            return []
+
+        # Convert to Pandas DataFrames
+        po_df = pd.DataFrame(po_data)
+        org_df = pd.DataFrame(org_data)
+        
+        # Ensure po_df has 'project_id' and 'organization_id'
+        if 'project_id' not in po_df.columns or 'organization_id' not in po_df.columns:
+            # This case means essential data is missing from project_organizations fetch
+            # or the table itself.
+            return []
+
+
+        if org_df.empty: # If no organization data, we can't map to countries
+            if not po_df.empty and 'project_id' in po_df.columns:
+                # Count all unique projects under 'Unknown' country
+                project_count_unknown_country = po_df['project_id'].nunique()
+                return [{"country": "Unknown", "project_count": project_count_unknown_country}]
+            return []
+
+        # 3. Merge dataframes
+        # project_organizations.organization_id links to organizations.id
+        merged_df = pd.merge(
+            po_df,
+            org_df,
+            left_on='organization_id',
+            right_on='id',
+            how='left'
+        )
+
+        # Handle cases where country might be NaN
+        if 'country' in merged_df.columns:
+            merged_df['country'] = merged_df['country'].fillna('Unknown')
+        else:
+            merged_df['country'] = 'Unknown' # If 'country' column missing from org_df or merge
+
+        # 4. Group by country and count unique project_ids
+        # The .nunique() method on a grouped series returns a series,
+        # so we reset_index to turn it into a DataFrame.
+        # Or use as_index=False in groupby and then rename.
+        projects_by_country_df = merged_df.groupby('country', as_index=False)['project_id'].nunique()
+        
+        # 5. Rename the column containing unique project counts
+        projects_by_country_df = projects_by_country_df.rename(columns={'project_id': 'project_count'})
+
+        # 6. Sort values by project_count in descending order
+        projects_by_country_df = projects_by_country_df.sort_values('project_count', ascending=False)
+
+        # 7. Convert DataFrame to list of dictionaries
+        result = projects_by_country_df.to_dict(orient='records')
+        
+        return result
+
+    except Exception as e:
+        print(f"Error calculating projects per country: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"An error occurred calculating projects per country: {str(e)}")
 
     # Distribution of EC funding per project
     # ------------------------------------
