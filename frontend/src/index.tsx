@@ -4,13 +4,13 @@ import './index.css';
 import App from './App';
 import Test from './test'; // Importing the test component
 import reportWebVitals from './reportWebVitals';
-
+import Sunburst from './sunburst'; // Importing the sunburst component
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
 );
 root.render(
   <React.StrictMode>
-    <Test />
+    <Sunburst />
   </React.StrictMode>
 );
 
