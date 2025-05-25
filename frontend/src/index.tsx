@@ -2,15 +2,17 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
-import Test from './test'; // Importing the test component
 import reportWebVitals from './reportWebVitals';
-import Sunburst from './sunburst'; // Importing the sunburst component
+import TestComponent from './testComponent'; // Importing the test component
+import AxiosComponent from './axiosComponent'; // Importing the axios component
+
+// import Sunburst from './sunburst'; // Importing the sunburst component
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
 );
 root.render(
   <React.StrictMode>
-    <Sunburst />
+    <AxiosComponent />
   </React.StrictMode>
 );
 

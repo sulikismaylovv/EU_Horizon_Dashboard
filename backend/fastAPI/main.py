@@ -1,5 +1,6 @@
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
 import os
 from dotenv import load_dotenv
@@ -25,6 +26,18 @@ app = FastAPI(
     description="API to fetch project data and analytics from Supabase.",
     version="1.0.0"
 )
+origins = [
+    "http://localhost:3000",  # Local development
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # Specifies the origins that are allowed to make requests.
+    allow_credentials=True, # Indicates that cookies should be supported for cross-origin requests.
+    allow_methods=["*"],    # Allows all common HTTP methods (GET, POST, PUT, DELETE, etc.).
+                            # You can specify methods: ["GET", "POST"]
+    allow_headers=["*"],    # Allows all headers. You can specify specific headers if needed.
+)
+
 
 # --- Pydantic Models ---
 class Project(BaseModel):
@@ -90,6 +103,10 @@ class ProjectAnalytics(BaseModel):
     average_total_cost: Optional[float] = Field(None, description="Average total cost of projects.")
     projects_per_framework: Dict[str, int] = Field(..., description="Count of projects per framework programme.")
     data_last_updated: Optional[datetime] = Field(None, description="Timestamp of the most recent content_update_date among projects.")
+
+@app.get("/")
+async def read_root():
+    return {"message": "Hello from FastAPI! CORS is enabled."}
 
 
 # --- FastAPI Endpoints ---
