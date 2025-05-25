@@ -3,8 +3,7 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
-import TestComponent from './testComponent'; // Importing the test component
-import AxiosComponent from './axiosComponent'; // Importing the axios component
+import Sunburst from './graphs/sunburst'; // Importing the sunburst component
 
 // import Sunburst from './sunburst'; // Importing the sunburst component
 const root = ReactDOM.createRoot(
@@ -12,7 +11,8 @@ const root = ReactDOM.createRoot(
 );
 root.render(
   <React.StrictMode>
-    <AxiosComponent />
+    {/* <AxiosComponent /> */}
+    <Sunburst />
   </React.StrictMode>
 );
 

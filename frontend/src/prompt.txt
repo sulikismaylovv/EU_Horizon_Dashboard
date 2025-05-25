@@ -1,0 +1,1904 @@
+review my code, it does not work. I am trying to display a sunburst chart on the frontend of my website but I can't make it happen. the data fetching works fine but the plot doesn't work. it is supposed to use plotly. I will show you all the necessary information.
+here is the script:
+import React, { useState, useEffect, useRef } from 'react';
+import axios from 'axios';
+import { SunburstAPIData } from '../interfaces/Sunburst';
+
+const SunburstDataViewer: React.FC = () => {
+  const [data, setData] = useState<SunburstAPIData | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [pyodide, setPyodide] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [plotSrc, setPlotSrc] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string>("Initializing Pyodide...");
+
+  // Ref to ensure useEffect runs only once for Pyodide initialization
+  const pyodideLoadedRef = useRef(false);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await axios.get<SunburstAPIData>('http://127.0.0.1:8000/projects/analytics/sunburst');
+        setData(response.data);
+      } catch (err) {
+
+          setError('An unexpected error occurred.');
+        
+        console.error("Error fetching data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+
+    if (pyodideLoadedRef.current) return; // Prevent re-running
+    pyodideLoadedRef.current = true;
+    const loadAndRunPyodide = async () => {
+      try {
+        // 1. Load Pyodide
+        // Check if Pyodide script is already loaded
+        if (!document.getElementById('pyodide-script')) {
+          const script = document.createElement('script');
+          script.id = 'pyodide-script';
+          script.src = 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js';
+          script.async = true;
+          document.head.appendChild(script);
+
+          await new Promise<void>((resolve, reject) => {
+            script.onload = () => resolve();
+            script.onerror = () => {
+              setStatusMessage("Failed to load Pyodide script.");
+              setError("Failed to load Pyodide script.");
+              reject(new Error("Failed to load Pyodide script."));
+            };
+          });
+        }
+        
+        // Pyodide script loaded, proceed with loading Pyodide directly.
+
+        
+        const pyodideInstance = await window.loadPyodide({
+          // indexURL: "https://cdn.jsdelivr.net/pyodide/v0.25.1/full/" // Optional: specify indexURL
+        });
+                // … inside your loadAndRunPyodide() after `const pyodideInstance = await window.loadPyodide(...)` …
+        
+        // 2a) Install Plotly via micropip
+        await pyodideInstance.loadPackage('micropip');
+        setStatusMessage("micropip loaded. Installing Plotly…");
+        await pyodideInstance.runPythonAsync(`
+        import micropip
+        await micropip.install("plotly")
+        `);
+        
+        setStatusMessage("Plotly installed. Loading Matplotlib…");
+        // 2b) (optional) load any other Pyodide built-ins
+        await pyodideInstance.loadPackage('matplotlib');
+        setStatusMessage("Matplotlib loaded. Generating plot…");
+        
+        // … then your existing pythonScript and runPythonAsync() …
+        setPyodide(pyodideInstance);
+        setStatusMessage("Pyodide loaded. Loading Matplotlib...");
+
+        // 2. Load Python packages (Matplotlib)
+        await pyodideInstance.loadPackage('matplotlib');
+        setStatusMessage("Matplotlib loaded. Generating plot...");
+
+        // 3. Define the Python script
+        const pythonScript = `
+import plotly.graph_objects as go
+import json
+import js  # Pyodide's module to interact with JavaScript
+
+# Retrieve the JSON data string.
+# This assumes that on the JavaScript side, you've done something like:
+# const jsonData = JSON.stringify(dataFromApi);
+# await pyodideInstance.globals.set('sunburst_data_json', jsonData);
+sunburst_data_json = js.globals.get('sunburst_data_json')
+
+if not sunburst_data_json:
+    # If data is not found, you could return an error message or an empty plot.
+    # For this example, it will raise an error that JavaScript can catch.
+    raise ValueError("Sunburst data JSON not found in Pyodide's global JavaScript scope. Ensure 'sunburst_data_json' was set.")
+
+chart_data = json.loads(sunburst_data_json)
+
+labels = chart_data.get('labels')
+parents = chart_data.get('parents')
+values = chart_data.get('values')
+# metric_name = chart_data.get('metric_name') # This is available if you need it for the title, etc.
+# max_level_processed = chart_data.get('max_level_processed') # Available if you want to use it for maxdepth
+
+if labels is None or parents is None or values is None:
+    raise ValueError("The provided sunburst data must contain 'labels', 'parents', and 'values' keys.")
+
+fig = go.Figure(go.Sunburst(
+    labels=labels,
+    parents=parents,
+    values=values,
+    branchvalues='total',  # Matches your Jupyter notebook example
+    maxdepth=3             # Matches your Jupyter notebook example; you could use max_level_processed dynamically if needed
+))
+
+fig.update_layout(
+    margin=dict(t=0, l=0, r=0, b=0)
+    # You can also set width and height here if needed, e.g.:
+    # width=700,
+    # height=700
+)
+
+# Convert the Plotly figure to an HTML string.
+# - full_html=False creates a <div> element containing the plot, rather than a full HTML page.
+# - include_plotlyjs='cdn' ensures that the necessary Plotly.js library is loaded from a CDN.
+#   This makes the HTML snippet self-contained for rendering the interactive plot.
+plot_html_output = fig.to_html(full_html=False, include_plotlyjs='cdn')
+
+# The last expression evaluated in the script is returned by pyodide.runPythonAsync()
+plot_html_output
+        `;
+
+        // 4. Run the Python script
+        const plotResult = await pyodideInstance.runPythonAsync(pythonScript);
+        setPlotSrc(plotResult as string);
+
+      } catch (error) {
+        setError(`Error initializing Pyodide: ${error instanceof Error ? error.message : String(error)}`);
+        console.error("Error initializing Pyodide:", error);
+      }
+    };
+
+    loadAndRunPyodide();
+  }, []); // Empty dependency array means this effect runs once on mount
+  if (loading) {
+    return <p>Loading data...</p>;
+  }
+
+  if (error) {
+    return <p style={{ color: 'red' }}>{error}</p>;
+  }
+
+  if (!data) {
+    return <p>No data available.</p>;
+  }
+
+  return (
+    <div>
+      <h2>Raw Sunburst Data:</h2>
+      <pre style={{ border: '1px solid #ccc', padding: '10px', backgroundColor: '#f9f9f9', whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
+        {JSON.stringify(data, null, 2)}
+      </pre>
+    </div>
+  );
+};
+
+export default SunburstDataViewer;
+
+
+here is the Jupyter code for the sunburst chart which works and what we're trying to recreate:
+# %%
+import pandas as pd
+import os
+import numpy as np
+from pathlib import Path
+import sys
+
+# %%
+# 0) set up
+from pathlib import Path
+import sys
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+
+project_root = Path.cwd().parent
+sys.path.append(str(project_root))
+from backend.classes import CORDIS_data
+
+h = CORDIS_data(parent_dir=project_root, enrich=False)
+
+# rename for brevity
+proj = h.project_df
+link = h.project_sci_voc       # columns: project_id, sci_voc_code
+sci  = h.sci_voc_df            # columns: code, path, title, description
+
+
+# %%
+# 1) define your metrics_list in snake_case
+metrics_list = [
+    'total_cost',
+    'ec_max_contribution',
+    'total_cost_per_year',
+    'ec_contribution_per_year',
+    'duration_days',
+    'duration_months',
+    'duration_years',
+    'n_institutions'
+]
+
+
+# %% [markdown]
+# Make dataframe with information per field/topic. The supcategories are made as separate columns for use in tree maps or sunburst diagrams.
+
+# %%
+# 2) build a single DataFrame with one row per (project, theme) + all your metrics
+df = (
+    link
+      .merge(sci.rename(columns={'code':'sci_voc_code',
+                                 'path':'sci_voc_path',
+                                 'title':'sci_voc_title'}),
+             on='sci_voc_code',
+             how='left')
+      .merge(proj[['id'] + metrics_list].rename(columns={'id':'project_id'}),
+             on='project_id',
+             how='left')
+)
+
+# explode the slash-delimited path into lvl0, lvl1, … 
+levels = df['sci_voc_path']\
+           .str.strip('/')\
+           .str.split('/', expand=True)\
+           .rename(columns=lambda i: f'path_lvl_{i}')
+
+df = pd.concat([df, levels], axis=1)
+
+
+# %% [markdown]
+# Make lists for labels, parents and values for treemap/sunburst diagram structure. These are all that is needed for visualization here.
+
+# %%
+labels = []
+parents = []
+values_dict = {m: [] for m in metrics_list}
+max_lvl = 4
+
+for lvl in range(max_lvl+1):
+    lvl_col     = f'path_lvl_{lvl}'
+    parent_col  = f'path_lvl_{lvl-1}' if lvl>0 else None
+
+    # unique nodes at this level, in original order
+    uniques = df[lvl_col].dropna().unique().tolist()
+    labels.extend(uniques)
+
+    # parents: empty for root, else the parent string
+    if lvl==0:
+        parents.extend(['']*len(uniques))
+    else:
+        # for each unique node, look up its parent
+        parents += [
+            df.loc[df[lvl_col]==node, parent_col].iloc[0] 
+            for node in uniques
+        ]
+
+    # now collect sums per metric
+    grp = df.groupby(lvl_col)
+    for m in metrics_list:
+        # ensure we sum in the same order as `uniques`
+        vals = grp[m].sum().reindex(uniques).fillna(0).tolist()
+        values_dict[m].extend(vals)
+
+
+# %% [markdown]
+# ## Plot
+
+# %%
+# finally pick one metric and draw
+metric = 'ec_max_contribution'
+fig = go.Figure(go.Sunburst(
+    labels=labels,
+    parents=parents,
+    values=values_dict[metric],
+    branchvalues='total',
+    maxdepth=3
+))
+fig.update_layout(margin=dict(t=0,l=0,r=0,b=0))
+fig.show()
+
+
+# %% [markdown]
+# todo:
+# - make beginning part of data preprocessing
+# - add better names and description of each metric
+
+# %% [markdown]
+# Notes:
+# - projects with no euroscivoc title specified are dropped
+# - for projects that belong to different fields, the total ecMaxContribution (or other metric) is added to all fields. (alternatively: distribute equally among the categories??)
+
+
+
+
+here is the data we receive in the form of json which is supposed to fill the data in the chart:
+{
+    "labels": [
+        "social sciences",
+        "medical and health sciences",
+        "natural sciences",
+        "engineering and technology",
+        "agricultural sciences",
+        "humanities",
+        "law",
+        "economics and business",
+        "basic medicine",
+        "computer and information sciences",
+        "electrical engineering, electronic engineering, information engineering",
+        "medical biotechnology",
+        "clinical medicine",
+        "chemical sciences",
+        "health sciences",
+        "materials engineering",
+        "political sciences",
+        "industrial biotechnology",
+        "psychology",
+        "sociology",
+        "biological sciences",
+        "agriculture, forestry, and fisheries",
+        "physical sciences",
+        "history and archaeology",
+        "environmental biotechnology",
+        "earth and related environmental sciences",
+        "mechanical engineering",
+        "animal and dairy science",
+        "nanotechnology",
+        "environmental engineering",
+        "languages and literature",
+        "mathematics",
+        "philosophy, ethics and religion",
+        "arts",
+        "agricultural biotechnology",
+        "chemical engineering",
+        "educational sciences",
+        "business and management",
+        "pharmacology and pharmacy",
+        "software",
+        "electronic engineering",
+        "implants",
+        "artificial intelligence",
+        "data science",
+        "pneumology",
+        "inorganic chemistry",
+        "public health",
+        "oncology",
+        "infectious diseases",
+        "textiles",
+        "internet",
+        "computer security",
+        "political transitions",
+        "cells technologies",
+        "biomaterials",
+        "economics",
+        "ergonomics",
+        "demography",
+        "neurology",
+        "transplantation",
+        "endocrinology",
+        "ecology",
+        "microbiology",
+        "bioprocessing technologies",
+        "agriculture",
+        "biochemistry",
+        "neurobiology",
+        "genetic engineering",
+        "information engineering",
+        "optics",
+        "history",
+        "forestry",
+        "bioremediation",
+        "environmental sciences",
+        "catalysis",
+        "botany",
+        "genetics",
+        "classical mechanics",
+        "fibers",
+        "archaeology",
+        "metallurgy",
+        "physiology",
+        "thermodynamics",
+        "theoretical physics",
+        "polymer sciences",
+        "databases",
+        "electromagnetism and electronics",
+        "thermodynamic engineering",
+        "industrial relations",
+        "domestic animals",
+        "nano-materials",
+        "energy and fuels",
+        "waste management",
+        "electrochemistry",
+        "anthropology",
+        "gerontology",
+        "nutrition",
+        "social issues",
+        "linguistics",
+        "biological behavioural sciences",
+        "nuclear chemistry",
+        "surgery",
+        "manufacturing engineering",
+        "public administration",
+        "governance",
+        "composites",
+        "atomic physics",
+        "nanophotonics",
+        "government systems",
+        "cell biology",
+        "pathology",
+        "psychiatry",
+        "applied mathematics",
+        "zoology",
+        "philosophy",
+        "religions",
+        "pure mathematics",
+        "colors",
+        "human rights",
+        "literature studies",
+        "ideologies",
+        "immunology",
+        "geology",
+        "anatomy and morphology",
+        "soil sciences",
+        "atmospheric sciences",
+        "musicology",
+        "acoustics",
+        "molecular biology",
+        "astronomy",
+        "modern and contemporary art",
+        "organic chemistry",
+        "physical geography",
+        "developmental biology",
+        "embryology",
+        "criminology",
+        "cardiology",
+        "vehicle engineering",
+        "computational science",
+        "biomass",
+        "quantum physics",
+        "physical chemistry",
+        "molecular and chemical physics",
+        "biophysics",
+        "tribology",
+        "evolutionary biology",
+        "knowledge engineering",
+        "performing arts",
+        "water treatment processes",
+        "geochemistry",
+        "behavioural psychology",
+        "histology",
+        "rheumatology",
+        "oceanography",
+        "nuclear physics",
+        "condensed matter physics",
+        "electrical engineering",
+        "natural resources management",
+        "political policies",
+        "ecosystem-based management",
+        "gender studies",
+        "analytical chemistry",
+        "remote sensing",
+        "geophysics",
+        "chemical process engineering",
+        "pedagogy",
+        "ophthalmology",
+        "general language studies",
+        "fisheries",
+        "entrepreneurship",
+        "pharmaceutical drugs",
+        "sensors",
+        "asthma",
+        "metalloids",
+        "epidemiology",
+        "cervical cancer",
+        "DNA viruses",
+        "internet of things",
+        "cryptography",
+        "revolutions",
+        "stem cells",
+        "production economics",
+        "mortality",
+        "stroke",
+        "diabetes",
+        "ecosystems",
+        "phycology",
+        "fermentation",
+        "horticulture",
+        "fertility",
+        "biomolecules",
+        "gene therapy",
+        "telecommunications",
+        "laser physics",
+        "human migrations",
+        "microscopy",
+        "drug discovery",
+        "skin cancer",
+        "pollution",
+        "mutation",
+        "fluid mechanics",
+        "drug resistance",
+        "transition metals",
+        "chromosomes",
+        "particle physics",
+        "terrorism",
+        "semiconductivity",
+        "heat engineering",
+        "automation",
+        "bioeconomy",
+        "animal husbandry",
+        "waste treatment processes",
+        "electric batteries",
+        "renewable energy",
+        "two-dimensional nanostructures",
+        "dementia",
+        "obesity",
+        "pathophysiology",
+        "optoelectronics",
+        "spintronics",
+        "mycology",
+        "corruption",
+        "spectroscopy",
+        "phonetics",
+        "ethology",
+        "radiation chemistry",
+        "econometrics",
+        "macroeconomics",
+        "machine learning",
+        "alkali metals",
+        "homeostasis",
+        "superconductivity",
+        "virology",
+        "alkaline earth metals",
+        "software applications",
+        "cell metabolism",
+        "posttraumatic stress disorder",
+        "photocatalysis",
+        "mathematical model",
+        "bioreactors",
+        "malaria",
+        "invertebrate zoology",
+        "bacteriology",
+        "history of philosophy",
+        "ancient history",
+        "islam",
+        "christianity",
+        "discrete mathematics",
+        "algebra",
+        "topology",
+        "mathematical analysis",
+        "DNA",
+        "mammalogy",
+        "genomes",
+        "human rights violations",
+        "entomology",
+        "RNA",
+        "history of literature",
+        "epigenetics",
+        "additive manufacturing",
+        "social inequalities",
+        "lung cancer",
+        "immunotherapy",
+        "employment",
+        "literary genres",
+        "mineralogy",
+        "grains and oilseeds",
+        "electrocatalysis",
+        "climatology",
+        "ethnomusicology",
+        "microeconomics",
+        "planetary sciences",
+        "cinematography",
+        "inorganic compounds",
+        "aliphatic compounds",
+        "epistemology",
+        "eastern religions",
+        "cartography",
+        "aerospace engineering",
+        "multiphysics",
+        "organic acids",
+        "biofuels",
+        "leukemia",
+        "quantum field theory",
+        "geometry",
+        "mathematical physics",
+        "quantum chemistry",
+        "astrochemistry",
+        "thermochemistry",
+        "alcohols",
+        "prehistory",
+        "epilepsy",
+        "robotics",
+        "ontology",
+        "RNA viruses",
+        "seismology",
+        "dramaturgy",
+        "sustainable economy",
+        "cardiovascular diseases",
+        "wastewater treatment processes",
+        "democracy",
+        "volatile organic compounds",
+        "biocomposites",
+        "electrolysis",
+        "biogeochemistry",
+        "nuclear fusion",
+        "solid-state physics",
+        "analogue electronics",
+        "computer hardware",
+        "data processing",
+        "water management",
+        "ethnoarchaeology",
+        "civil society",
+        "modern history",
+        "climate change adaptation",
+        "physical anthropology",
+        "astrophysics",
+        "physical cosmology",
+        "pharmacokinetics",
+        "mass spectrometry",
+        "nucleotides",
+        "political economy",
+        "glaciology",
+        "agronomy",
+        "commerce",
+        "parkinson",
+        "microelectronics",
+        "business models",
+        "transport layer",
+        "bioarchaeology",
+        "immunisation",
+        "antibiotics",
+        "vaccines",
+        "pandemics",
+        "productivity",
+        "fruit growing",
+        "proteins",
+        "radio technology",
+        "melanoma",
+        "microfluidics",
+        "biosensors",
+        "optical sensors",
+        "photons",
+        "mobile phones",
+        "vegetable growing",
+        "recycling",
+        "graphene",
+        "particle accelerator",
+        "quarks",
+        "biological interactions",
+        "simulation software",
+        "antibiotic resistance",
+        "alzheimer",
+        "multidrug resistance",
+        "ancient philosophy",
+        "mathematical logic",
+        "algebraic topology",
+        "functional analysis",
+        "human trafficking",
+        "gender inequality",
+        "racial inequality",
+        "telecommunications networks",
+        "crystallography",
+        "lipids",
+        "climatic changes",
+        "carbohydrates",
+        "super resolution microscopy",
+        "asteroids",
+        "meteors",
+        "geographic information systems",
+        "aircraft",
+        "conformal field theory",
+        "fermions",
+        "celestial mechanics",
+        "hydrogen energy",
+        "coronaviruses",
+        "muslim culture",
+        "cardiac arrhythmia",
+        "planets",
+        "legumes",
+        "oilseeds",
+        "primatology",
+        "nongovernmental organizations",
+        "geothermal energy",
+        "quantum computers",
+        "satellite technology",
+        "deep learning",
+        "plant breeding",
+        "differential equations",
+        "solar energy",
+        "HIV",
+        "essays",
+        "cereals",
+        "nucleic acids",
+        "cetology",
+        "wind power",
+        "algebraic geometry",
+        "gluons",
+        "leptons"
+    ],
+    "parents": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "social sciences",
+        "social sciences",
+        "medical and health sciences",
+        "natural sciences",
+        "engineering and technology",
+        "medical and health sciences",
+        "medical and health sciences",
+        "natural sciences",
+        "medical and health sciences",
+        "engineering and technology",
+        "social sciences",
+        "engineering and technology",
+        "social sciences",
+        "social sciences",
+        "natural sciences",
+        "agricultural sciences",
+        "natural sciences",
+        "humanities",
+        "engineering and technology",
+        "natural sciences",
+        "engineering and technology",
+        "agricultural sciences",
+        "engineering and technology",
+        "engineering and technology",
+        "humanities",
+        "natural sciences",
+        "humanities",
+        "humanities",
+        "agricultural sciences",
+        "engineering and technology",
+        "social sciences",
+        "economics and business",
+        "basic medicine",
+        "computer and information sciences",
+        "electrical engineering, electronic engineering, information engineering",
+        "medical biotechnology",
+        "computer and information sciences",
+        "computer and information sciences",
+        "clinical medicine",
+        "chemical sciences",
+        "health sciences",
+        "clinical medicine",
+        "health sciences",
+        "materials engineering",
+        "computer and information sciences",
+        "computer and information sciences",
+        "political sciences",
+        "medical biotechnology",
+        "industrial biotechnology",
+        "economics and business",
+        "psychology",
+        "sociology",
+        "basic medicine",
+        "clinical medicine",
+        "clinical medicine",
+        "biological sciences",
+        "biological sciences",
+        "industrial biotechnology",
+        "agriculture, forestry, and fisheries",
+        "biological sciences",
+        "biological sciences",
+        "medical biotechnology",
+        "electrical engineering, electronic engineering, information engineering",
+        "physical sciences",
+        "history and archaeology",
+        "agriculture, forestry, and fisheries",
+        "environmental biotechnology",
+        "earth and related environmental sciences",
+        "chemical sciences",
+        "biological sciences",
+        "biological sciences",
+        "physical sciences",
+        "materials engineering",
+        "history and archaeology",
+        "materials engineering",
+        "basic medicine",
+        "physical sciences",
+        "physical sciences",
+        "chemical sciences",
+        "computer and information sciences",
+        "physical sciences",
+        "mechanical engineering",
+        "sociology",
+        "animal and dairy science",
+        "nanotechnology",
+        "environmental engineering",
+        "environmental engineering",
+        "chemical sciences",
+        "sociology",
+        "clinical medicine",
+        "health sciences",
+        "sociology",
+        "languages and literature",
+        "biological sciences",
+        "chemical sciences",
+        "clinical medicine",
+        "mechanical engineering",
+        "political sciences",
+        "sociology",
+        "materials engineering",
+        "physical sciences",
+        "nanotechnology",
+        "political sciences",
+        "biological sciences",
+        "basic medicine",
+        "clinical medicine",
+        "mathematics",
+        "biological sciences",
+        "philosophy, ethics and religion",
+        "philosophy, ethics and religion",
+        "mathematics",
+        "materials engineering",
+        "law",
+        "languages and literature",
+        "sociology",
+        "basic medicine",
+        "earth and related environmental sciences",
+        "basic medicine",
+        "earth and related environmental sciences",
+        "earth and related environmental sciences",
+        "arts",
+        "physical sciences",
+        "biological sciences",
+        "physical sciences",
+        "arts",
+        "chemical sciences",
+        "earth and related environmental sciences",
+        "biological sciences",
+        "clinical medicine",
+        "law",
+        "clinical medicine",
+        "mechanical engineering",
+        "computer and information sciences",
+        "agricultural biotechnology",
+        "physical sciences",
+        "chemical sciences",
+        "physical sciences",
+        "biological sciences",
+        "mechanical engineering",
+        "biological sciences",
+        "computer and information sciences",
+        "arts",
+        "environmental engineering",
+        "earth and related environmental sciences",
+        "psychology",
+        "biological sciences",
+        "clinical medicine",
+        "earth and related environmental sciences",
+        "physical sciences",
+        "physical sciences",
+        "electrical engineering, electronic engineering, information engineering",
+        "environmental engineering",
+        "political sciences",
+        "environmental engineering",
+        "sociology",
+        "chemical sciences",
+        "environmental engineering",
+        "earth and related environmental sciences",
+        "chemical engineering",
+        "educational sciences",
+        "clinical medicine",
+        "languages and literature",
+        "agriculture, forestry, and fisheries",
+        "business and management",
+        "pharmacology and pharmacy",
+        "electronic engineering",
+        "pneumology",
+        "inorganic chemistry",
+        "public health",
+        "oncology",
+        "infectious diseases",
+        "internet",
+        "computer security",
+        "political transitions",
+        "cells technologies",
+        "economics",
+        "demography",
+        "neurology",
+        "endocrinology",
+        "ecology",
+        "microbiology",
+        "bioprocessing technologies",
+        "agriculture",
+        "demography",
+        "biochemistry",
+        "genetic engineering",
+        "information engineering",
+        "optics",
+        "demography",
+        "optics",
+        "pharmacology and pharmacy",
+        "oncology",
+        "environmental sciences",
+        "genetics",
+        "classical mechanics",
+        "pharmacology and pharmacy",
+        "inorganic chemistry",
+        "genetics",
+        "theoretical physics",
+        "political transitions",
+        "electromagnetism and electronics",
+        "thermodynamic engineering",
+        "industrial relations",
+        "economics",
+        "domestic animals",
+        "waste management",
+        "electrochemistry",
+        "energy and fuels",
+        "nano-materials",
+        "neurology",
+        "nutrition",
+        "physiology",
+        "electromagnetism and electronics",
+        "electromagnetism and electronics",
+        "microbiology",
+        "social issues",
+        "optics",
+        "linguistics",
+        "biological behavioural sciences",
+        "nuclear chemistry",
+        "economics",
+        "economics",
+        "artificial intelligence",
+        "inorganic chemistry",
+        "physiology",
+        "electromagnetism and electronics",
+        "microbiology",
+        "inorganic chemistry",
+        "software",
+        "cell biology",
+        "psychiatry",
+        "catalysis",
+        "applied mathematics",
+        "bioremediation",
+        "infectious diseases",
+        "zoology",
+        "microbiology",
+        "philosophy",
+        "history",
+        "religions",
+        "religions",
+        "pure mathematics",
+        "pure mathematics",
+        "pure mathematics",
+        "pure mathematics",
+        "genetics",
+        "zoology",
+        "genetics",
+        "human rights",
+        "zoology",
+        "genetics",
+        "literature studies",
+        "genetics",
+        "manufacturing engineering",
+        "social issues",
+        "oncology",
+        "immunology",
+        "business and management",
+        "literature studies",
+        "geology",
+        "agriculture",
+        "catalysis",
+        "atmospheric sciences",
+        "musicology",
+        "economics",
+        "astronomy",
+        "modern and contemporary art",
+        "inorganic chemistry",
+        "organic chemistry",
+        "philosophy",
+        "religions",
+        "physical geography",
+        "vehicle engineering",
+        "computational science",
+        "organic chemistry",
+        "biomaterials",
+        "oncology",
+        "quantum physics",
+        "pure mathematics",
+        "applied mathematics",
+        "physical chemistry",
+        "astronomy",
+        "physical chemistry",
+        "organic chemistry",
+        "history",
+        "neurology",
+        "electronic engineering",
+        "knowledge engineering",
+        "infectious diseases",
+        "geology",
+        "performing arts",
+        "economics",
+        "cardiology",
+        "water treatment processes",
+        "government systems",
+        "organic chemistry",
+        "composites",
+        "electrochemistry",
+        "geochemistry",
+        "nuclear physics",
+        "condensed matter physics",
+        "electronic engineering",
+        "electronic engineering",
+        "data science",
+        "natural resources management",
+        "archaeology",
+        "political policies",
+        "history",
+        "ecosystem-based management",
+        "anthropology",
+        "astronomy",
+        "astronomy",
+        "pharmacology and pharmacy",
+        "analytical chemistry",
+        "genetics",
+        "economics",
+        "physical geography",
+        "agriculture",
+        "business and management",
+        "neurology",
+        "electromagnetism and electronics",
+        "business and management",
+        "internet",
+        "archaeology",
+        "immunology",
+        "pharmaceutical drugs",
+        "pharmaceutical drugs",
+        "epidemiology",
+        "production economics",
+        "horticulture",
+        "biomolecules",
+        "telecommunications",
+        "skin cancer",
+        "fluid mechanics",
+        "sensors",
+        "sensors",
+        "particle physics",
+        "telecommunications",
+        "horticulture",
+        "waste treatment processes",
+        "two-dimensional nanostructures",
+        "particle physics",
+        "particle physics",
+        "ethology",
+        "software applications",
+        "drug resistance",
+        "dementia",
+        "drug resistance",
+        "history of philosophy",
+        "discrete mathematics",
+        "topology",
+        "mathematical analysis",
+        "human rights violations",
+        "social inequalities",
+        "social inequalities",
+        "telecommunications",
+        "mineralogy",
+        "biomolecules",
+        "climatology",
+        "biomolecules",
+        "microscopy",
+        "planetary sciences",
+        "planetary sciences",
+        "cartography",
+        "aerospace engineering",
+        "mathematical physics",
+        "particle physics",
+        "planetary sciences",
+        "renewable energy",
+        "RNA viruses",
+        "islam",
+        "cardiovascular diseases",
+        "planetary sciences",
+        "grains and oilseeds",
+        "grains and oilseeds",
+        "mammalogy",
+        "civil society",
+        "renewable energy",
+        "computer hardware",
+        "aerospace engineering",
+        "machine learning",
+        "agronomy",
+        "mathematical analysis",
+        "renewable energy",
+        "RNA viruses",
+        "literary genres",
+        "grains and oilseeds",
+        "biomolecules",
+        "mammalogy",
+        "renewable energy",
+        "algebra",
+        "particle physics",
+        "particle physics"
+    ],
+    "values": [
+        1847575.0,
+        1574000.0,
+        3718281.0,
+        300000.0,
+        75000.0,
+        0.0,
+        674000.0,
+        873575.0,
+        749000.0,
+        600000.0,
+        75000.0,
+        300000.0,
+        450000.0,
+        75000.0,
+        75000.0,
+        75000.0,
+        75000.0,
+        150000.0,
+        75000.0,
+        150000.0,
+        3043281.0,
+        75000.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        798575.0,
+        674000.0,
+        300000.0,
+        75000.0,
+        150000.0,
+        75000.0,
+        75000.0,
+        75000.0,
+        75000.0,
+        75000.0,
+        225000.0,
+        0.0,
+        75000.0,
+        75000.0,
+        75000.0,
+        75000.0,
+        150000.0,
+        75000.0,
+        75000.0,
+        75000.0,
+        150000.0,
+        75000.0,
+        75000.0,
+        75000.0,
+        1573575.0,
+        75000.0,
+        75000.0,
+        75000.0,
+        1394706.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        798575.0,
+        674000.0,
+        75000.0,
+        75000.0,
+        75000.0,
+        75000.0,
+        0.0,
+        0.0,
+        75000.0,
+        75000.0,
+        75000.0,
+        150000.0,
+        75000.0,
+        75000.0,
+        75000.0,
+        75000.0,
+        1573575.0,
+        75000.0,
+        75000.0,
+        75000.0,
+        75000.0,
+        1394706.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        75000.0,
+        599000.0,
+        75000.0,
+        75000.0,
+        75000.0,
+        1394706.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+    ],
+    "metric_name": "ec_max_contribution",
+    "max_level_processed": 4
+}
+
+here is how we get the json data shown before:
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from supabase import create_client, Client
+import os
+from dotenv import load_dotenv
+from pydantic import BaseModel, validator, Field
+from typing import Optional, List, Dict, Any
+from datetime import date, datetime
+import pandas as pd # Import pandas
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Supabase credentials
+SUPABASE_URL = "https://nmkhssxsltmufkkgcfcu.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ta2hzc3hzbHRtdWZra2djZmN1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0ODAzNDM3NSwiZXhwIjoyMDYzNjEwMzc1fQ.7vzQzb1blpQ5oXAy8XZAoJzwLhN1yMQZ9VuDOEljkuM"
+
+
+# Create Supabase client
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# Initialize FastAPI app
+app = FastAPI(
+    title="EU Horizon Projects API",
+    description="API to fetch project data and analytics from Supabase.",
+    version="1.0.0"
+)
+origins = [
+    "http://localhost:3000",  # Local development
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # Specifies the origins that are allowed to make requests.
+    allow_credentials=True, # Indicates that cookies should be supported for cross-origin requests.
+    allow_methods=["*"],    # Allows all common HTTP methods (GET, POST, PUT, DELETE, etc.).
+                            # You can specify methods: ["GET", "POST"]
+    allow_headers=["*"],    # Allows all headers. You can specify specific headers if needed.
+)
+
+
+# --- Pydantic Models ---
+class Project(BaseModel):
+    id: int
+    acronym: str
+    status: Optional[str] = None
+    title: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    total_cost: Optional[float] = None
+    ec_max_contribution: Optional[float] = None
+    ec_signature_date: Optional[date] = None
+    framework_programme: Optional[str] = None
+    master_call: Optional[str] = None
+    sub_call: Optional[str] = None
+    funding_scheme: Optional[str] = None
+    nature: Optional[str] = None
+    objective: Optional[str] = None
+    content_update_date: Optional[datetime] = None
+    rcn: Optional[str] = None
+    grant_doi: Optional[str] = None
+    duration_days: Optional[int] = None
+    duration_months: Optional[int] = None
+    duration_years: Optional[int] = None
+    n_institutions: Optional[int] = None
+    coordinator_name: Optional[str] = None
+    ec_contribution_per_year: Optional[float] = None
+    total_cost_per_year: Optional[float] = None
+    field_class: Optional[str] = None
+    field: Optional[str] = None
+    sub_field: Optional[str] = None
+    niche: Optional[str] = None
+
+    @validator('total_cost', 'ec_max_contribution', 'ec_contribution_per_year', 'total_cost_per_year', pre=True)
+    def parse_numeric(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                return float(value)
+            except ValueError:
+                return None # Or raise an error, or handle as appropriate
+        return value
+
+class SciVoc(BaseModel): # For data from sci_voc table
+    code: str
+    path: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+
+class SunburstChartData(BaseModel):
+    labels: List[str]
+    parents: List[str]
+    values: List[Optional[float]] # Values for the selected metric
+    metric_name: str = Field(..., description="The metric used for the 'values' field.")
+    max_level_processed: int = Field(..., description="Number of path levels processed for the hierarchy (0-indexed).")
+
+
+
+class ProjectAnalytics(BaseModel):
+    total_project_count: int = Field(..., description="Total number of projects.")
+    projects_by_status: Dict[str, int] = Field(..., description="Count of projects grouped by status.")
+    average_total_cost: Optional[float] = Field(None, description="Average total cost of projects.")
+    projects_per_framework: Dict[str, int] = Field(..., description="Count of projects per framework programme.")
+    data_last_updated: Optional[datetime] = Field(None, description="Timestamp of the most recent content_update_date among projects.")
+
+@app.get("/")
+async def read_root():
+    return {"message": "Hello from FastAPI! CORS is enabled."}
+
+
+# --- FastAPI Endpoints ---
+@app.get("/projects", response_model=List[Project], tags=["Projects"])
+async def get_projects():
+    """
+    Fetches all projects from the Supabase 'projects' table.
+    """
+    try:
+        response = supabase.table("projects").select("*").execute()
+        projects_data = response.data
+        if projects_data is None: # Handle case where data might be None from Supabase
+             return []
+        return projects_data
+    except Exception as e:
+        print(f"Error fetching projects: {e}") # Log the error
+        raise HTTPException(status_code=500, detail=f"An error occurred while fetching projects: {str(e)}")
+
+@app.get("/project/{project_id}", response_model=Project, tags=["Projects"])
+async def get_project_by_id(project_id: int):
+    """
+    Fetches a single project by its ID from the Supabase 'projects' table.
+    """
+    try:
+        response = supabase.table("projects").select("*").eq("id", project_id).single().execute()
+        project_data = response.data
+        if not project_data:
+            raise HTTPException(status_code=404, detail="Project not found")
+        return project_data
+    except Exception as e:
+        # Check if the error is due to "PGRST116" (resource not found from PostgREST)
+        if hasattr(e, 'message') and "PGRST116" in e.message:
+             raise HTTPException(status_code=404, detail="Project not found (PGRST116)")
+        print(f"Error fetching project by ID {project_id}: {e}") # Log the error
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+@app.get("/projects/analytics", response_model=ProjectAnalytics, tags=["Analytics"])
+async def get_project_analytics():
+    """
+    Fetches all projects, performs basic analytics using Pandas, and returns the results.
+    """
+    try:
+        # 1. Fetch all project data
+        projects_response = supabase.table("projects").select("status, total_cost, framework_programme, content_update_date").execute()
+        projects_data = projects_response.data
+
+        if not projects_data:
+            # Return default analytics if no data, or raise an error
+            return ProjectAnalytics(
+                total_project_count=0,
+                projects_by_status={},
+                average_total_cost=None,
+                projects_per_framework={},
+                data_last_updated=None
+            )
+
+        # 2. Convert to Pandas DataFrame
+        # Ensure that 'total_cost' is numeric. If it can be None or non-numeric string, handle it.
+        for project in projects_data:
+            cost_str = project.get('total_cost')
+            if isinstance(cost_str, str):
+                try:
+                    project['total_cost'] = float(cost_str)
+                except (ValueError, TypeError):
+                    project['total_cost'] = None # Or pd.NA or 0, depending on how you want to treat invalid/missing costs
+            elif not isinstance(cost_str, (int, float)):
+                 project['total_cost'] = None
+
+
+        df = pd.DataFrame(projects_data)
+
+        # 3. Perform Analytics
+        total_project_count = len(df)
+
+        # Projects by status (handle potential None values in status)
+        df['status'] = df['status'].fillna('Unknown') # Replace None status with 'Unknown'
+        status_counts = df['status'].value_counts()
+        # Explicitly convert keys to str and values to int for Pydantic validation
+        projects_by_status = {str(k): int(v) for k, v in status_counts.items()}
+
+
+        # Average total_cost (ensure 'total_cost' is numeric and handle NaNs)
+        # The Pydantic model validator already tries to convert to float.
+        # If conversion failed and resulted in None, those will be ignored by .mean()
+        average_total_cost = df['total_cost'].astype(float).mean() # Convert to float explicitly for mean
+        if pd.isna(average_total_cost): # Handle case where mean results in NaN (e.g., all costs are None)
+            average_total_cost = None
+
+        # Projects per framework programme
+        df['framework_programme'] = df['framework_programme'].fillna('Not Specified')
+        framework_counts = df['framework_programme'].value_counts()
+        # Explicitly convert keys to str and values to int for Pydantic validation
+        projects_per_framework = {str(k): int(v) for k, v in framework_counts.items()}
+
+
+        # Data last updated (most recent content_update_date)
+        # Convert 'content_update_date' to datetime objects, coercing errors to NaT
+        df['content_update_date'] = pd.to_datetime(df['content_update_date'], errors='coerce')
+        data_last_updated_ts = df['content_update_date'].max() # Keep original pd.Timestamp or NaT
+        # Convert Timestamp to datetime if it's not NaT, else None
+        if pd.isna(data_last_updated_ts):
+            data_last_updated = None
+        else:
+            data_last_updated = data_last_updated_ts.to_pydatetime()
+
+
+        # 4. Structure and return results
+        analytics_results = ProjectAnalytics(
+            total_project_count=total_project_count,
+            projects_by_status=projects_by_status,
+            average_total_cost=average_total_cost,
+            projects_per_framework=projects_per_framework,
+            data_last_updated=data_last_updated
+        )
+        return analytics_results
+
+    except Exception as e:
+        print(f"Error performing project analytics: {e}") # Log the error
+        import traceback
+        traceback.print_exc() # Print full traceback for debugging
+        raise HTTPException(status_code=500, detail=f"An error occurred during analytics: {str(e)}")
+
+METRICS_LIST_SUNBURST = [
+    'total_cost', 'ec_max_contribution', 'total_cost_per_year',
+    'ec_contribution_per_year', 'duration_days', 'duration_months',
+    'duration_years', 'n_institutions'
+]
+MAX_SUNBURST_LEVEL = 4 # Corresponds to path_lvl_0 to path_lvl_4
+
+
+@app.get("/projects/analytics/sunburst", response_model=SunburstChartData, tags=["Analytics"])
+async def get_sunburst_data(
+    metric: str = Query('ec_max_contribution', enum=METRICS_LIST_SUNBURST, description="Metric to be used for sunburst values.")
+):
+    """
+    Generates data suitable for a sunburst chart, based on project metrics
+    and scientific vocabulary (sci_voc) hierarchy.
+    """
+    try:
+        # 1. Fetch data from Supabase
+        # Fetch projects (only relevant columns)
+        project_cols_to_fetch = ["id"] + METRICS_LIST_SUNBURST
+        projects_response = supabase.table("projects").select(",".join(project_cols_to_fetch)).execute()
+        proj_df_data = projects_response.data
+        if not proj_df_data: proj_df_data = []
+
+
+        # Fetch sci_voc
+        sci_voc_response = supabase.table("sci_voc").select("code, path, title").execute()
+        sci_df_data = sci_voc_response.data
+        if not sci_df_data: sci_df_data = []
+
+        # Fetch project_sci_voc (links)
+        link_response = supabase.table("project_sci_voc").select("project_id, sci_voc_code").execute()
+        link_df_data = link_response.data
+        if not link_df_data: link_df_data = []
+
+        if not proj_df_data or not sci_df_data or not link_df_data:
+            return SunburstChartData(labels=[], parents=[], values=[], metric_name=metric, max_level_processed=MAX_SUNBURST_LEVEL)
+
+        # Data type conversion for project metrics before creating DataFrame
+        int_metrics = ['duration_days', 'duration_months', 'duration_years', 'n_institutions']
+        float_metrics = ['total_cost', 'ec_max_contribution', 'total_cost_per_year', 'ec_contribution_per_year']
+
+        for project_row in proj_df_data:
+            for metric_col in int_metrics:
+                val = project_row.get(metric_col)
+                if isinstance(val, str):
+                    try: project_row[metric_col] = int(float(val)) # float first for "123.0"
+                    except (ValueError, TypeError): project_row[metric_col] = None
+                elif not isinstance(val, (int, type(None))): project_row[metric_col] = None
+
+            for metric_col in float_metrics:
+                val = project_row.get(metric_col)
+                if isinstance(val, str):
+                    try: project_row[metric_col] = float(val)
+                    except (ValueError, TypeError): project_row[metric_col] = None
+                elif not isinstance(val, (float, int, type(None))): project_row[metric_col] = None
+
+
+        proj_df = pd.DataFrame(proj_df_data)
+        sci_df = pd.DataFrame(sci_df_data)
+        link_df = pd.DataFrame(link_df_data)
+
+        # 2. Build a single DataFrame (replicating notebook logic)
+        df = (
+            link_df
+            .merge(sci_df.rename(columns={'code': 'sci_voc_code',
+                                          'path': 'sci_voc_path',
+                                          'title': 'sci_voc_title'}),
+                   on='sci_voc_code',
+                   how='left')
+            .merge(proj_df.rename(columns={'id': 'project_id'}),
+                   on='project_id',
+                   how='left')
+        )
+
+        if df.empty:
+             return SunburstChartData(labels=[], parents=[], values=[], metric_name=metric, max_level_processed=MAX_SUNBURST_LEVEL)
+
+        # Explode the slash-delimited path
+        # Handle potential None in 'sci_voc_path' by filling with empty string before split
+        levels = df['sci_voc_path'].fillna('').str.strip('/').str.split('/', expand=True)
+        levels = levels.rename(columns=lambda i: f'path_lvl_{i}')
+        
+        # Ensure all potential levels up to MAX_SUNBURST_LEVEL exist, even if paths are shorter
+        for i in range(MAX_SUNBURST_LEVEL + 1):
+            if f'path_lvl_{i}' not in levels.columns:
+                levels[f'path_lvl_{i}'] = None # Add missing level columns as None
+
+        df = pd.concat([df, levels], axis=1)
+
+        # 3. Prepare data for sunburst
+        labels = []
+        parents = []
+        values_dict = {m: [] for m in METRICS_LIST_SUNBURST}
+        
+        for lvl in range(MAX_SUNBURST_LEVEL + 1):
+            lvl_col = f'path_lvl_{lvl}'
+            parent_col = f'path_lvl_{lvl - 1}' if lvl > 0 else None
+
+            # Filter out rows where the current level path is None or empty
+            # This also handles projects not linked to any sci_voc or with short paths
+            current_level_nodes_df = df[df[lvl_col].notna() & (df[lvl_col] != '')]
+            if current_level_nodes_df.empty:
+                continue # Skip if no nodes at this level
+
+            uniques = current_level_nodes_df[lvl_col].unique().tolist()
+            labels.extend(uniques)
+
+            if lvl == 0:
+                parents.extend([''] * len(uniques))
+            else:
+                # For each unique node, look up its parent
+                # Ensure parent_col exists and is valid
+                node_parents = []
+                for node in uniques:
+                    parent_series = current_level_nodes_df.loc[current_level_nodes_df[lvl_col] == node, parent_col]
+                    if not parent_series.empty:
+                        node_parents.append(parent_series.iloc[0])
+                    else: # Should not happen if data is consistent
+                        node_parents.append('') 
+                parents.extend(node_parents)
+            
+            # Sum metrics for nodes at this level
+            grp = current_level_nodes_df.groupby(lvl_col)
+            for m_key in METRICS_LIST_SUNBURST:
+                # Sum, reindex to match 'uniques' order, fill NaN with 0
+                metric_sum = grp[m_key].sum(numeric_only=True).reindex(uniques).fillna(0).tolist()
+                values_dict[m_key].extend(metric_sum)
+        
+        if not labels: # If no hierarchical data was processed
+            return SunburstChartData(labels=[], parents=[], values=[], metric_name=metric, max_level_processed=MAX_SUNBURST_LEVEL)
+
+        # Select values for the chosen metric
+        final_values = values_dict.get(metric, [])
+        # Ensure all values are float or None for Pydantic model
+        final_values_cleaned = [float(v) if pd.notna(v) else None for v in final_values]
+
+
+        return SunburstChartData(
+            labels=labels,
+            parents=parents,
+            values=final_values_cleaned,
+            metric_name=metric,
+            max_level_processed=MAX_SUNBURST_LEVEL
+        )
+
+    except Exception as e:
+        print(f"Error generating sunburst data: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"An error occurred generating sunburst data: {str(e)}")
