@@ -578,17 +578,18 @@ def update_map(selected_country,
     else:
         filtered_proj = df_proj
         filtered_org = df_org
- 
+   
 
     # filter by thematic fields
-    for col in ['field_class', 'field', 'sub_field', 'niche']:
-        filtered_proj[col] = filtered_proj[col].apply(to_list_of_strings)
+    print(type(filtered_proj['field_class']))
+    print(type(filtered_proj[['field_class', 'field', 'sub_field', 'niche']]))
+    # for col in ['field_class', 'field', 'sub_field', 'niche']:
+    #     filtered_proj[col] = filtered_proj[col].apply(to_list_of_strings)
     filtered_proj = filter_by_list_column(filtered_proj, 'field_class', selected_field_class)
     filtered_proj = filter_by_list_column(filtered_proj, 'field', selected_field)
     filtered_proj = filter_by_list_column(filtered_proj, 'sub_field', selected_subfield)
     filtered_proj = filter_by_list_column(filtered_proj, 'niche', selected_niche)
     filtered_org = filtered_org[filtered_org['id'].isin(filtered_proj['id'])]
-
 
 
     # Filter by activity type
@@ -733,4 +734,4 @@ def update_map(selected_country,
     return fig, table_data
         
 if __name__ == '__main__':
-    app.run(debug=True, port=8040)
+    app.run(debug=False, port=8040)
