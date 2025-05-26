@@ -183,6 +183,66 @@ class BubbleChartResponse(BaseModel):
     y_axis_label: str
     size_label: str
 
+class PublicationAnalysis(BaseModel):
+    year: int
+    publication_count: int
+    projects_with_publications: int
+    avg_publications_per_project: float
+
+class PublicationTimelineResponse(BaseModel):
+    chart_title: str = "Research Output Timeline"
+    x_axis_label: str = "Year"
+    y_axis_label: str = "Count"
+    data: List[PublicationAnalysis]
+
+class TopicEvolutionData(BaseModel):
+    topic: str
+    year: int
+    project_count: int
+    funding_amount: float
+
+class TopicEvolutionResponse(BaseModel):
+    chart_title: str = "Topic Evolution Over Time"
+    data: List[TopicEvolutionData]
+    x_axis_label: str = "Year"
+    y_axis_label: str = "Project Count"
+
+class ProjectSuccessMetrics(BaseModel):
+    project_acronym: str
+    duration_months: int
+    publications_count: int
+    funding_efficiency: float  # publications per million EUR
+    collaboration_score: int  # number of participating countries
+
+class ProjectSuccessResponse(BaseModel):
+    chart_title: str = "Project Success Analysis"
+    data: List[ProjectSuccessMetrics]
+    x_axis_label: str = "Publications Count"
+    y_axis_label: str = "Funding Efficiency"
+
+class ResearchFieldNetworkNode(BaseModel):
+    id: str
+    label: str
+    size: float
+    publications: int
+    funding: float
+
+class ResearchFieldNetworkResponse(BaseModel):
+    chart_title: str = "Research Field Collaboration Network"
+    nodes: List[ResearchFieldNetworkNode]
+    edges: List[NetworkEdge]
+
+class SeasonalityData(BaseModel):
+    month: int
+    month_name: str
+    project_starts: int
+    avg_funding: float
+
+class SeasonalityResponse(BaseModel):
+    chart_title: str = "Project Start Seasonality"
+    data: List[SeasonalityData]
+    chart_type: str = "polar"
+
 # --- FastAPI Endpoints ---
 
 @app.get("/")
@@ -1143,3 +1203,283 @@ async def get_participation_trends(
     except Exception as e:
         print(f"Error generating participation trends: {e}")
         raise HTTPException(status_code=500, detail=f"Error generating participation trends: {str(e)}")
+
+@app.get("/analytics/research-output-timeline", response_model=PublicationTimelineResponse, tags=["Analytics"])
+async def get_research_output_timeline():
+    """
+    Analyzes research output over time using publications data.
+    Shows publication trends and research productivity.
+    """
+    try:
+        pub_response = supabase.table("publications").select("published_year, project_id").execute()
+        if not pub_response.data:
+            return PublicationTimelineResponse(data=[])
+
+        pub_df = pd.DataFrame(pub_response.data)
+        pub_df['published_year'] = pd.to_numeric(pub_df['published_year'], errors='coerce')
+        pub_df = pub_df.dropna(subset=['published_year'])
+        pub_df = pub_df[(pub_df['published_year'] >= 2000) & (pub_df['published_year'] <= 2024)]
+
+        # Count publications per year
+        pub_per_year = pub_df.groupby('published_year').size().reset_index(name='publication_count')
+        
+        # Count unique projects with publications per year
+        projects_per_year = pub_df.groupby('published_year')['project_id'].nunique().reset_index(name='projects_with_publications')
+        
+        # Merge and calculate average
+        timeline_df = pd.merge(pub_per_year, projects_per_year, on='published_year')
+        timeline_df['avg_publications_per_project'] = timeline_df['publication_count'] / timeline_df['projects_with_publications']
+
+        result_data = [
+            PublicationAnalysis(
+                year=int(row['published_year']),
+                publication_count=int(row['publication_count']),
+                projects_with_publications=int(row['projects_with_publications']),
+                avg_publications_per_project=float(row['avg_publications_per_project'])
+            )
+            for _, row in timeline_df.iterrows()
+        ]
+
+        return PublicationTimelineResponse(data=result_data)
+    except Exception as e:
+        print(f"Error generating research output timeline: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating research output timeline: {str(e)}")
+
+@app.get("/analytics/topic-evolution", response_model=TopicEvolutionResponse, tags=["Analytics"])
+async def get_topic_evolution():
+    """
+    Shows how different research topics have evolved over time in terms of project count and funding.
+    Creates a stream graph or area chart visualization.
+    """
+    try:
+        # Get project-topic relationships and project details
+        proj_response = supabase.table("projects").select("id, start_date, ec_max_contribution").execute()
+        topic_response = supabase.table("topics").select("code, title").execute()
+        
+        # Assuming there's a project_topics junction table
+        try:
+            proj_topic_response = supabase.table("project_topics").select("project_id, topic_code").execute()
+        except:
+            # If project_topics doesn't exist, create mock data based on project fields
+            proj_topic_response = None
+
+        if not proj_response.data or not topic_response.data:
+            return TopicEvolutionResponse(data=[])
+
+        proj_df = pd.DataFrame(proj_response.data)
+        topic_df = pd.DataFrame(topic_response.data)
+        
+        proj_df['start_date'] = pd.to_datetime(proj_df['start_date'], errors='coerce')
+        proj_df = proj_df.dropna(subset=['start_date'])
+        proj_df['year'] = proj_df['start_date'].dt.year
+        proj_df['ec_max_contribution'] = pd.to_numeric(proj_df['ec_max_contribution'], errors='coerce').fillna(0)
+
+        if proj_topic_response and proj_topic_response.data:
+            proj_topic_df = pd.DataFrame(proj_topic_response.data)
+            merged_df = pd.merge(proj_topic_df, proj_df, left_on='project_id', right_on='id')
+            merged_df = pd.merge(merged_df, topic_df, left_on='topic_code', right_on='code')
+        else:
+            # Fallback: use project fields as topics
+            field_projects = proj_df[proj_df['field'].notna()].copy()
+            field_projects['topic'] = field_projects['field']
+            merged_df = field_projects
+
+        if merged_df.empty:
+            return TopicEvolutionResponse(data=[])
+
+        # Group by topic and year
+        topic_evolution = merged_df.groupby(['title' if 'title' in merged_df.columns else 'topic', 'year']).agg({
+            'id': 'count',
+            'ec_max_contribution': 'sum'
+        }).reset_index()
+
+        topic_evolution.columns = ['topic', 'year', 'project_count', 'funding_amount']
+
+        result_data = [
+            TopicEvolutionData(
+                topic=row['topic'],
+                year=int(row['year']),
+                project_count=int(row['project_count']),
+                funding_amount=float(row['funding_amount'])
+            )
+            for _, row in topic_evolution.iterrows()
+        ]
+
+        return TopicEvolutionResponse(data=result_data)
+    except Exception as e:
+        print(f"Error generating topic evolution: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating topic evolution: {str(e)}")
+
+@app.get("/analytics/project-success-metrics", response_model=ProjectSuccessResponse, tags=["Analytics"])
+async def get_project_success_metrics():
+    """
+    Analyzes project success based on publications output, funding efficiency, and collaboration.
+    Creates a sophisticated scatter plot with multiple dimensions.
+    """
+    try:
+        proj_response = supabase.table("projects").select("id, acronym, duration_months, ec_max_contribution").execute()
+        pub_response = supabase.table("publications").select("project_id").execute()
+        po_response = supabase.table("project_organizations").select("project_id, organization_id").execute()
+        org_response = supabase.table("organizations").select("id, country").execute()
+
+        if not all([proj_response.data, pub_response.data, po_response.data, org_response.data]):
+            return ProjectSuccessResponse(data=[])
+
+        proj_df = pd.DataFrame(proj_response.data)
+        pub_df = pd.DataFrame(pub_response.data)
+        po_df = pd.DataFrame(po_response.data)
+        org_df = pd.DataFrame(org_response.data)
+
+        # Count publications per project
+        pub_counts = pub_df.groupby('project_id').size().reset_index(name='publications_count')
+        
+        # Count countries per project (collaboration score)
+        po_org_df = pd.merge(po_df, org_df, left_on='organization_id', right_on='id')
+        country_counts = po_org_df.groupby('project_id')['country'].nunique().reset_index(name='collaboration_score')
+        
+        # Merge all data
+        success_df = pd.merge(proj_df, pub_counts, left_on='id', right_on='project_id', how='left')
+        success_df = pd.merge(success_df, country_counts, left_on='id', right_on='project_id', how='left')
+        
+        # Fill missing values
+        success_df['publications_count'] = success_df['publications_count'].fillna(0)
+        success_df['collaboration_score'] = success_df['collaboration_score'].fillna(1)
+        
+        # Calculate funding efficiency (publications per million EUR)
+        success_df['ec_max_contribution'] = pd.to_numeric(success_df['ec_max_contribution'], errors='coerce').fillna(1)
+        success_df['duration_months'] = pd.to_numeric(success_df['duration_months'], errors='coerce').fillna(12)
+        success_df['funding_efficiency'] = success_df['publications_count'] / (success_df['ec_max_contribution'] / 1000000)
+        success_df['funding_efficiency'] = success_df['funding_efficiency'].replace([float('inf')], 0)
+        
+        # Filter for projects with some activity
+        success_df = success_df[(success_df['publications_count'] > 0) | (success_df['ec_max_contribution'] > 100000)]
+        success_df = success_df.head(100)  # Limit for visualization
+
+        result_data = [
+            ProjectSuccessMetrics(
+                project_acronym=row['acronym'] or f"Project_{row['id']}",
+                duration_months=int(row['duration_months']),
+                publications_count=int(row['publications_count']),
+                funding_efficiency=float(row['funding_efficiency']),
+                collaboration_score=int(row['collaboration_score'])
+            )
+            for _, row in success_df.iterrows()
+        ]
+
+        return ProjectSuccessResponse(data=result_data)
+    except Exception as e:
+        print(f"Error generating project success metrics: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating project success metrics: {str(e)}")
+
+@app.get("/analytics/research-field-network", response_model=ResearchFieldNetworkResponse, tags=["Analytics"])
+async def get_research_field_network():
+    """
+    Creates a network showing relationships between research fields based on shared projects and publications.
+    """
+    try:
+        proj_response = supabase.table("projects").select("id, field, sub_field, ec_max_contribution").execute()
+        pub_response = supabase.table("publications").select("project_id").execute()
+        
+        if not proj_response.data:
+            return ResearchFieldNetworkResponse(nodes=[], edges=[])
+
+        proj_df = pd.DataFrame(proj_response.data)
+        pub_df = pd.DataFrame(pub_response.data) if pub_response.data else pd.DataFrame()
+        
+        # Count publications per project
+        if not pub_df.empty:
+            pub_counts = pub_df.groupby('project_id').size().reset_index(name='publications_count')
+            proj_df = pd.merge(proj_df, pub_counts, left_on='id', right_on='project_id', how='left')
+        proj_df['publications_count'] = proj_df.get('publications_count', 0).fillna(0)
+        
+        # Clean and prepare field data
+        proj_df['field'] = proj_df['field'].fillna('Unknown')
+        proj_df['ec_max_contribution'] = pd.to_numeric(proj_df['ec_max_contribution'], errors='coerce').fillna(0)
+        
+        # Aggregate by field
+        field_stats = proj_df.groupby('field').agg({
+            'id': 'count',
+            'publications_count': 'sum',
+            'ec_max_contribution': 'sum'
+        }).reset_index()
+        field_stats.columns = ['field', 'project_count', 'total_publications', 'total_funding']
+        
+        # Create nodes
+        nodes = []
+        for _, row in field_stats.iterrows():
+            if row['project_count'] > 1:  # Only include fields with multiple projects
+                nodes.append(ResearchFieldNetworkNode(
+                    id=row['field'],
+                    label=row['field'],
+                    size=float(row['project_count']),
+                    publications=int(row['total_publications']),
+                    funding=float(row['total_funding'])
+                ))
+        
+        # Create edges based on shared sub-fields or common patterns
+        edges = []
+        if 'sub_field' in proj_df.columns:
+            # Find fields that share sub-fields
+            field_subfield = proj_df.groupby(['field', 'sub_field']).size().reset_index(name='count')
+            subfield_fields = field_subfield.groupby('sub_field')['field'].apply(list).reset_index()
+            
+            for _, row in subfield_fields.iterrows():
+                fields = row['field']
+                if len(fields) > 1:
+                    for i in range(len(fields)):
+                        for j in range(i + 1, len(fields)):
+                            edge_weight = 1.0  # Could be weighted by shared project count
+                            edges.append(NetworkEdge(
+                                source=fields[i],
+                                target=fields[j],
+                                weight=edge_weight
+                            ))
+
+        return ResearchFieldNetworkResponse(nodes=nodes, edges=edges)
+    except Exception as e:
+        print(f"Error generating research field network: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating research field network: {str(e)}")
+
+@app.get("/analytics/project-seasonality", response_model=SeasonalityResponse, tags=["Analytics"])
+async def get_project_seasonality():
+    """
+    Analyzes seasonal patterns in project starts and funding allocation.
+    Creates a polar/radar chart showing monthly patterns.
+    """
+    try:
+        response = supabase.table("projects").select("start_date, ec_max_contribution").execute()
+        if not response.data:
+            return SeasonalityResponse(data=[])
+
+        df = pd.DataFrame(response.data)
+        df['start_date'] = pd.to_datetime(df['start_date'], errors='coerce')
+        df = df.dropna(subset=['start_date'])
+        df['month'] = df['start_date'].dt.month
+        df['ec_max_contribution'] = pd.to_numeric(df['ec_max_contribution'], errors='coerce').fillna(0)
+
+        # Group by month
+        monthly_stats = df.groupby('month').agg({
+            'start_date': 'count',
+            'ec_max_contribution': 'mean'
+        }).reset_index()
+        monthly_stats.columns = ['month', 'project_starts', 'avg_funding']
+
+        # Add month names
+        month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        monthly_stats['month_name'] = monthly_stats['month'].apply(lambda x: month_names[x-1])
+
+        result_data = [
+            SeasonalityData(
+                month=int(row['month']),
+                month_name=row['month_name'],
+                project_starts=int(row['project_starts']),
+                avg_funding=float(row['avg_funding'])
+            )
+            for _, row in monthly_stats.iterrows()
+        ]
+
+        return SeasonalityResponse(data=result_data)
+    except Exception as e:
+        print(f"Error generating project seasonality: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating project seasonality: {str(e)}")
