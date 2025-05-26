@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
@@ -116,6 +115,75 @@ class ProjectAnalytics(BaseModel):
     average_total_cost: Optional[float] = Field(None, description="Average total cost of projects.")
     projects_per_framework: Dict[str, int] = Field(..., description="Count of projects per framework programme.")
     data_last_updated: Optional[datetime] = Field(None, description="Timestamp of the most recent content_update_date among projects.")
+
+class TimeSeriesData(BaseModel):
+    year: int
+    metric_value: float
+    metric_name: str
+
+class ProjectTimelineResponse(BaseModel):
+    chart_title: str
+    x_axis_label: str = "Year"
+    y_axis_label: str
+    data: List[TimeSeriesData]
+    chart_type: str = "line"
+
+class NetworkNode(BaseModel):
+    id: str
+    label: str
+    size: float
+    group: Optional[str] = None
+
+class NetworkEdge(BaseModel):
+    source: str
+    target: str
+    weight: float
+
+class NetworkGraphResponse(BaseModel):
+    chart_title: str
+    nodes: List[NetworkNode]
+    edges: List[NetworkEdge]
+    description: str
+
+class DistributionData(BaseModel):
+    label: str
+    value: float
+    count: int
+
+class DistributionResponse(BaseModel):
+    chart_title: str
+    data: List[DistributionData]
+    chart_type: str
+    x_axis_label: str
+    y_axis_label: str
+
+class HeatmapData(BaseModel):
+    x_category: str
+    y_category: str
+    value: float
+
+class HeatmapResponse(BaseModel):
+    chart_title: str
+    data: List[HeatmapData]
+    x_axis_label: str
+    y_axis_label: str
+    color_scale_label: str
+
+class BubbleChartData(BaseModel):
+    x: float
+    y: float
+    size: float
+    label: str
+    category: Optional[str] = None
+
+class BubbleChartResponse(BaseModel):
+    chart_title: str
+    data: List[BubbleChartData]
+    x_axis_label: str
+    y_axis_label: str
+    size_label: str
+
+# --- FastAPI Endpoints ---
 
 @app.get("/")
 async def read_root():
@@ -787,3 +855,291 @@ async def get_funding_by_country_data():
         import traceback
         traceback.print_exc() # Print full traceback for debugging
         raise HTTPException(status_code=500, detail=f"An error occurred generating funding by country data: {str(e)}")
+
+@app.get("/analytics/project-timeline", response_model=ProjectTimelineResponse, tags=["Analytics"])
+async def get_project_timeline(
+    metric: str = Query('project_count', enum=['project_count', 'total_funding', 'average_duration'], description="Metric to track over time")
+):
+    """
+    Returns time series data showing project trends over years (start dates).
+    Suitable for line charts showing project evolution over time.
+    """
+    try:
+        response = supabase.table("projects").select("start_date, total_cost, ec_max_contribution, duration_months").execute()
+        projects_data = response.data
+        if not projects_data:
+            return ProjectTimelineResponse(chart_title="Project Timeline", y_axis_label="Count", data=[])
+
+        df = pd.DataFrame(projects_data)
+        df['start_date'] = pd.to_datetime(df['start_date'], errors='coerce')
+        df = df.dropna(subset=['start_date'])
+        df['year'] = df['start_date'].dt.year
+
+        if metric == 'project_count':
+            timeline_data = df.groupby('year').size().reset_index(name='count')
+            y_label = "Number of Projects"
+            timeline_data['metric_value'] = timeline_data['count']
+        elif metric == 'total_funding':
+            df['ec_max_contribution'] = pd.to_numeric(df['ec_max_contribution'], errors='coerce').fillna(0)
+            timeline_data = df.groupby('year')['ec_max_contribution'].sum().reset_index()
+            y_label = "Total EC Contribution (EUR)"
+            timeline_data['metric_value'] = timeline_data['ec_max_contribution']
+        else:  # average_duration
+            df['duration_months'] = pd.to_numeric(df['duration_months'], errors='coerce')
+            timeline_data = df.groupby('year')['duration_months'].mean().reset_index()
+            y_label = "Average Duration (Months)"
+            timeline_data['metric_value'] = timeline_data['duration_months']
+
+        result_data = [
+            TimeSeriesData(year=int(row['year']), metric_value=float(row['metric_value']), metric_name=metric)
+            for _, row in timeline_data.iterrows()
+        ]
+
+        return ProjectTimelineResponse(
+            chart_title=f"Project {metric.replace('_', ' ').title()} Timeline",
+            y_axis_label=y_label,
+            data=result_data
+        )
+    except Exception as e:
+        print(f"Error generating project timeline: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating project timeline: {str(e)}")
+
+@app.get("/analytics/collaboration-network", response_model=NetworkGraphResponse, tags=["Analytics"])
+async def get_collaboration_network(
+    min_collaborations: int = Query(2, ge=1, description="Minimum number of collaborations to include in network")
+):
+    """
+    Returns network data showing collaboration patterns between countries.
+    Suitable for network graphs showing which countries collaborate most frequently.
+    """
+    try:
+        po_response = supabase.table("project_organizations").select("project_id, organization_id").execute()
+        org_response = supabase.table("organizations").select("id, country").execute()
+        
+        if not po_response.data or not org_response.data:
+            return NetworkGraphResponse(chart_title="Country Collaboration Network", nodes=[], edges=[], description="No data available")
+
+        po_df = pd.DataFrame(po_response.data)
+        org_df = pd.DataFrame(org_response.data)
+        
+        merged_df = pd.merge(po_df, org_df, left_on='organization_id', right_on='id', how='left')
+        merged_df = merged_df.dropna(subset=['country'])
+        
+        # Get country pairs per project
+        project_countries = merged_df.groupby('project_id')['country'].apply(list).reset_index()
+        
+        # Count collaborations between country pairs
+        collaboration_counts = {}
+        country_project_counts = merged_df.groupby('country')['project_id'].nunique().to_dict()
+        
+        for _, row in project_countries.iterrows():
+            countries = list(set(row['country']))  # Remove duplicates
+            if len(countries) > 1:
+                for i in range(len(countries)):
+                    for j in range(i + 1, len(countries)):
+                        pair = tuple(sorted([countries[i], countries[j]]))
+                        collaboration_counts[pair] = collaboration_counts.get(pair, 0) + 1
+
+        # Filter by minimum collaborations
+        filtered_collaborations = {k: v for k, v in collaboration_counts.items() if v >= min_collaborations}
+        
+        # Create nodes and edges
+        involved_countries = set()
+        for pair in filtered_collaborations.keys():
+            involved_countries.update(pair)
+        
+        nodes = [
+            NetworkNode(
+                id=country,
+                label=country,
+                size=float(country_project_counts.get(country, 1)),
+                group="country"
+            )
+            for country in involved_countries
+        ]
+        
+        edges = [
+            NetworkEdge(source=pair[0], target=pair[1], weight=float(count))
+            for pair, count in filtered_collaborations.items()
+        ]
+
+        return NetworkGraphResponse(
+            chart_title="Country Collaboration Network",
+            nodes=nodes,
+            edges=edges,
+            description=f"Shows countries that collaborated on at least {min_collaborations} projects together"
+        )
+    except Exception as e:
+        print(f"Error generating collaboration network: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating collaboration network: {str(e)}")
+
+@app.get("/analytics/funding-distribution", response_model=DistributionResponse, tags=["Analytics"])
+async def get_funding_distribution(
+    bin_count: int = Query(20, ge=5, le=50, description="Number of bins for the distribution")
+):
+    """
+    Returns funding distribution data suitable for histogram visualization.
+    Shows how project funding amounts are distributed.
+    """
+    try:
+        response = supabase.table("projects").select("ec_max_contribution").execute()
+        projects_data = response.data
+        if not projects_data:
+            return DistributionResponse(chart_title="Funding Distribution", data=[], chart_type="histogram", x_axis_label="Funding Range", y_axis_label="Count")
+
+        df = pd.DataFrame(projects_data)
+        df['ec_max_contribution'] = pd.to_numeric(df['ec_max_contribution'], errors='coerce')
+        df = df.dropna(subset=['ec_max_contribution'])
+        df = df[df['ec_max_contribution'] > 0]
+
+        # Create bins
+        hist, bin_edges = pd.cut(df['ec_max_contribution'], bins=bin_count, retbins=True, include_lowest=True)
+        bin_counts = hist.value_counts().sort_index()
+
+        result_data = []
+        for interval, count in bin_counts.items():
+            label = f"€{interval.left:,.0f} - €{interval.right:,.0f}"
+            avg_value = (interval.left + interval.right) / 2
+            result_data.append(DistributionData(label=label, value=float(avg_value), count=int(count)))
+
+        return DistributionResponse(
+            chart_title="Project Funding Distribution",
+            data=result_data,
+            chart_type="histogram",
+            x_axis_label="Funding Range (EUR)",
+            y_axis_label="Number of Projects"
+        )
+    except Exception as e:
+        print(f"Error generating funding distribution: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating funding distribution: {str(e)}")
+
+@app.get("/analytics/program-duration-heatmap", response_model=HeatmapResponse, tags=["Analytics"])
+async def get_program_duration_heatmap():
+    """
+    Returns heatmap data showing average project duration by framework program and funding scheme.
+    Suitable for heatmap visualization.
+    """
+    try:
+        response = supabase.table("projects").select("framework_programme, funding_scheme, duration_months").execute()
+        projects_data = response.data
+        if not projects_data:
+            return HeatmapResponse(chart_title="Program Duration Heatmap", data=[], x_axis_label="Framework Program", y_axis_label="Funding Scheme", color_scale_label="Average Duration (Months)")
+
+        df = pd.DataFrame(projects_data)
+        df['duration_months'] = pd.to_numeric(df['duration_months'], errors='coerce')
+        df = df.dropna(subset=['framework_programme', 'funding_scheme', 'duration_months'])
+
+        heatmap_data = df.groupby(['framework_programme', 'funding_scheme'])['duration_months'].mean().reset_index()
+
+        result_data = [
+            HeatmapData(
+                x_category=row['framework_programme'],
+                y_category=row['funding_scheme'],
+                value=float(row['duration_months'])
+            )
+            for _, row in heatmap_data.iterrows()
+        ]
+
+        return HeatmapResponse(
+            chart_title="Average Project Duration by Program and Scheme",
+            data=result_data,
+            x_axis_label="Framework Programme",
+            y_axis_label="Funding Scheme",
+            color_scale_label="Average Duration (Months)"
+        )
+    except Exception as e:
+        print(f"Error generating program duration heatmap: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating program duration heatmap: {str(e)}")
+
+@app.get("/analytics/efficiency-bubble-chart", response_model=BubbleChartResponse, tags=["Analytics"])
+async def get_efficiency_bubble_chart():
+    """
+    Returns bubble chart data showing project efficiency metrics.
+    X-axis: Total Cost, Y-axis: Duration, Bubble size: EC Contribution, Color: Framework Program
+    """
+    try:
+        response = supabase.table("projects").select("acronym, total_cost, duration_months, ec_max_contribution, framework_programme").execute()
+        projects_data = response.data
+        if not projects_data:
+            return BubbleChartResponse(chart_title="Project Efficiency Analysis", data=[], x_axis_label="Total Cost", y_axis_label="Duration", size_label="EC Contribution")
+
+        df = pd.DataFrame(projects_data)
+        numeric_cols = ['total_cost', 'duration_months', 'ec_max_contribution']
+        for col in numeric_cols:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        df = df.dropna(subset=numeric_cols)
+        df = df[(df['total_cost'] > 0) & (df['duration_months'] > 0) & (df['ec_max_contribution'] > 0)]
+
+        result_data = [
+            BubbleChartData(
+                x=float(row['total_cost']),
+                y=float(row['duration_months']),
+                size=float(row['ec_max_contribution']),
+                label=row['acronym'] or f"Project {row.name}",
+                category=row['framework_programme'] or "Unknown"
+            )
+            for _, row in df.iterrows()
+        ]
+
+        return BubbleChartResponse(
+            chart_title="Project Efficiency Analysis",
+            data=result_data,
+            x_axis_label="Total Cost (EUR)",
+            y_axis_label="Duration (Months)",
+            size_label="EC Contribution (EUR)"
+        )
+    except Exception as e:
+        print(f"Error generating efficiency bubble chart: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating efficiency bubble chart: {str(e)}")
+
+@app.get("/analytics/participation-trends", response_model=ProjectTimelineResponse, tags=["Analytics"])
+async def get_participation_trends(
+    country: str = Query(..., description="Country code/name to analyze participation trends")
+):
+    """
+    Returns time series data showing a specific country's participation trends over time.
+    Suitable for line charts showing how a country's involvement has evolved.
+    """
+    try:
+        po_response = supabase.table("project_organizations").select("project_id, organization_id").execute()
+        org_response = supabase.table("organizations").select("id, country").execute()
+        proj_response = supabase.table("projects").select("id, start_date").execute()
+        
+        if not all([po_response.data, org_response.data, proj_response.data]):
+            return ProjectTimelineResponse(chart_title=f"{country} Participation Trends", y_axis_label="Project Count", data=[])
+
+        po_df = pd.DataFrame(po_response.data)
+        org_df = pd.DataFrame(org_response.data)
+        proj_df = pd.DataFrame(proj_response.data)
+
+        # Filter organizations by country
+        country_orgs = org_df[org_df['country'] == country]['id'].tolist()
+        if not country_orgs:
+            return ProjectTimelineResponse(chart_title=f"{country} Participation Trends", y_axis_label="Project Count", data=[])
+
+        # Get projects for this country
+        country_projects = po_df[po_df['organization_id'].isin(country_orgs)]['project_id'].unique()
+        
+        # Merge with project dates
+        country_proj_df = proj_df[proj_df['id'].isin(country_projects)].copy()
+        country_proj_df['start_date'] = pd.to_datetime(country_proj_df['start_date'], errors='coerce')
+        country_proj_df = country_proj_df.dropna(subset=['start_date'])
+        country_proj_df['year'] = country_proj_df['start_date'].dt.year
+
+        # Count projects per year
+        timeline_data = country_proj_df.groupby('year').size().reset_index(name='count')
+
+        result_data = [
+            TimeSeriesData(year=int(row['year']), metric_value=float(row['count']), metric_name="project_count")
+            for _, row in timeline_data.iterrows()
+        ]
+
+        return ProjectTimelineResponse(
+            chart_title=f"{country} Project Participation Trends",
+            y_axis_label="Number of Projects",
+            data=result_data
+        )
+    except Exception as e:
+        print(f"Error generating participation trends: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating participation trends: {str(e)}")
