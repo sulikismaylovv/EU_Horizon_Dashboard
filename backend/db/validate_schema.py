@@ -4,7 +4,7 @@ import sys
 import logging
 import pandas as pd
 
-# 1️⃣ Setup logging to UTF-8 so you can keep any unicode you like
+# 1 Setup logging to UTF-8 so you can keep any unicode you like
 handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(logging.Formatter("%(levelname)s:%(message)s"))
 if hasattr(handler.stream, "reconfigure"):
@@ -12,11 +12,11 @@ if hasattr(handler.stream, "reconfigure"):
 logging.getLogger().addHandler(handler)
 logging.basicConfig(level=logging.INFO, handlers=[handler])
 
-# 2️⃣ Paths
+# 2 Paths
 DATA_DIR       = "data/processed"
 DDL_SQL_PATH   = "supabase/migrations/20250523_create_core_tables.sql"
 
-# 3️⃣ Expected output schemas matching your exported CSVs
+# 3 Expected output schemas matching your exported CSVs
 REQUIRED_SCHEMAS = {
     "projects.csv": [
         "id", "acronym", "status", "title",
