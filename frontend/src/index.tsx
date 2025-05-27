@@ -16,7 +16,7 @@ import ImpactAnalysis from './graphs/ImpactAnalysis';
 
 import TopicEvolution from './components/TopicEvolution';
 import ProjectSeasonality from './components/ProjectSeasonality';
-import ResearchFieldNetwork from './components/ResearchFieldNetwork';
+// import ResearchFieldNetwork from './components/ResearchFieldNetwork';
 // import CollaborationNetwork from './components/CollaborationNetwork';
 // import ResearchOutputTimeline from './components/ResearchOutputTimeline';
 import InteractiveMap from './components/InteractiveMap';
@@ -90,8 +90,6 @@ import InteractiveMap from './components/InteractiveMap';
           return <ProjectsByCountryBarChart />;
         case 'ec-contribution-country':
           return <EcByCountryBarChart />;
-        case 'research-field-network':
-          return <ResearchFieldNetwork />;
         case 'collaboration-network':
           return <ImpactAnalysis />;
         case 'funding-distribution':
@@ -156,9 +154,7 @@ import InteractiveMap from './components/InteractiveMap';
                   <ImpactAnalysis />
                 </ChartCard>
 
-                <ChartCard id="research-field-network" title="Research Field Network" fullWidth>
-                  <ResearchFieldNetwork />
-                </ChartCard>
+
 
               </div>
             </>
