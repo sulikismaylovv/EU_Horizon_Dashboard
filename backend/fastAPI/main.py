@@ -7,6 +7,8 @@ from pydantic import BaseModel, validator, Field
 from typing import Optional, List, Dict, Any
 from datetime import date, datetime
 import pandas as pd # Import pandas
+import numpy as np
+from fastapi.responses import JSONResponse
 
 # Load environment variables from .env file
 load_dotenv()
@@ -333,6 +335,10 @@ async def get_projects():
         projects_data = response.data
         if projects_data is None: # Handle case where data might be None from Supabase
              return []
+        # handle 'Infinity' and nan values
+        df = pd.DataFrame(projects_data)
+        df = df.replace(['Infinity',np.nan, np.inf], None)
+        projects_data = df.to_dict(orient="records")
         return projects_data
     except Exception as e:
         print(f"Error fetching projects: {e}") # Log the error
@@ -2029,3 +2035,60 @@ async def get_interactive_map_data(
     except Exception as e:
         print(f"Error generating interactive map data: {e}")
         raise HTTPException(status_code=500, detail=f"Error generating interactive map data: {str(e)}")
+    
+@app.get("/projects_impact_analysis", tags=["Projects"])
+async def get_projects_impact_analysis():
+    """
+    Loads project data from Supabase, joins with publications, and outputs columns as in the impact analysis notebook.
+    """
+    try:
+        # 1. Fetch projects and publications
+        projects_resp = supabase.table("projects").select("*").execute()
+        publications_resp = supabase.table("publications").select("project_id").execute()
+        if not projects_resp.data:
+            return []
+        df = pd.DataFrame(projects_resp.data)
+        pubs = pd.DataFrame(publications_resp.data) if publications_resp.data else pd.DataFrame(columns=["project_id"])
+
+        # 2. Count publications per project
+        n_publications = pubs.groupby('project_id').size().rename('n_publications')
+        df = df.merge(n_publications, left_on='id', right_on='project_id', how='outer')
+        df['n_publications'] = df['n_publications'].fillna(0)
+
+        # 3. Add duration_months_remainder
+        if 'duration_months' in df.columns:
+            df['duration_months_remainder'] = df['duration_months'] % 12
+        else:
+            df['duration_months_remainder'] = None
+
+        # 4. Format scientific field columns for printing
+        for column in ['field_class', 'field', 'sub_field', 'niche']:
+            if column in df.columns:
+                df[column] = df[column].apply(
+                    lambda x: x[2:-2].replace("', '", ", ") if isinstance(x, str) and x.startswith("[['") and x.endswith("']]") else x
+                )
+
+        # 5. Fill missing values as in notebook
+        if 'total_cost' in df.columns:
+            df['total_cost'] = df['total_cost'].fillna('Unknown')
+        if 'n_publications' in df.columns:
+            df['n_publications'] = df['n_publications'].fillna(0)
+
+        # 6. Select columns to match notebook output
+        columns_needed = [
+            'id', 'acronym', 'status', 'title', 'total_cost', 'ec_max_contribution',
+            'duration_days', 'duration_months',
+            'duration_years', 'n_institutions', 'ec_contribution_per_year', 
+            'total_cost_per_year','niche', 
+            'n_publications', 'duration_months_remainder'
+        ]
+        columns_final = [c for c in columns_needed if c in df.columns]
+        # Replace all NaN and infinite values with None for JSON compliance
+        df = df.replace([np.nan, np.inf, -np.inf], None)
+        result = df[columns_final].to_dict(orient="records")
+        return JSONResponse(content=result)
+    except Exception as e:
+        print(f"Error in /projects_impact_analysis: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error in /projects_impact_analysis: {str(e)}")
