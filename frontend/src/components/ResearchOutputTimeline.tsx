@@ -23,7 +23,10 @@ const ResearchOutputTimeline: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('http://54.93.51.85:8000/analytics/research-output-timeline');
+        const endpoint = process.env.NODE_ENV === 'development'
+          ? '/analytics/research-output-timeline' // CRA will proxy this to http://
+          : '/api/analytics/research-output-timeline'; // Vercel will rewrite this to your catch-all
+        const response = await fetch(endpoint);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }

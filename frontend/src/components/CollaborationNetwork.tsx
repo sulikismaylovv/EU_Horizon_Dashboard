@@ -34,7 +34,10 @@ const CollaborationNetwork: React.FC = () => {
       try {
         setLoading(true);
         console.log('Fetching collaboration network data...');
-        const response = await fetch(`http://54.93.51.85:8000/analytics/collaboration-network?min_collaborations=${minCollaborations}`);
+        const endpoint = process.env.NODE_ENV === 'development'
+          ? '/analytics/collaboration-network?min_collaborations=2' // Local development
+          : '/api/analytics/collaboration-network?min_collaborations=2'; // Production environment
+        const response = await fetch(endpoint);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }

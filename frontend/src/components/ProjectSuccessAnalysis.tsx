@@ -24,7 +24,10 @@ const ProjectSuccessAnalysis: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('http://54.93.51.85:8000/analytics/project-success-metrics');
+        const endpoint = process.env.NODE_ENV === 'development' 
+          ? '/analytics/project-success-metrics' // CRA will proxy this to http://
+          : '/api/analytics/project-success-metrics'; // Vercel will rewrite this to your catch-all
+        const response = await fetch(endpoint);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }

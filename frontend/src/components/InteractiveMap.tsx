@@ -117,8 +117,10 @@ const InteractiveMap: React.FC = () => {
             params.append(key, value.toString());
           }
         });
-
-        const response = await fetch(`http://54.93.51.85:8000/analytics/interactive-map?${params.toString()}`);
+        const endpoint = process.env.NODE_ENV === 'development'
+          ? '/analytics/interactive-map' // CRA will proxy this to http://localhost:8000
+          : '/api/analytics/interactive-map'; // Vercel will rewrite this to your catch-all
+        const response = await fetch(`${endpoint}?${params.toString()}`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
