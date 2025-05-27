@@ -26,7 +26,8 @@ const ProjectsByCountryBarChart: React.FC = () => {
 
         // Remove the first element from the response data
         if (res.data && res.data.length > 0) {
-          setPlotData(res.data.slice(1)) // Slice the array starting from the second element
+          setPlotData(res.data) // Slice the array starting from the second element
+          // setPlotData(res.data.slice(1)) // Slice the array starting from the second element
         } else {
           setPlotData([]) // Set to empty array if response is empty or null
         }
