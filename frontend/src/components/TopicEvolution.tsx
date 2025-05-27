@@ -23,7 +23,7 @@ const TopicEvolution: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('http://localhost:8000/analytics/topic-evolution');
+        const response = await fetch('http://54.93.51.85:8000/analytics/topic-evolution');
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -87,28 +87,6 @@ const TopicEvolution: React.FC = () => {
           config={{ responsive: true }}
           style={{ width: '100%', height: '100%' }}
         />
-      </div>
-
-      {/* Summary table */}
-      <div className="mt-6">
-        <h4 className="text-lg font-medium mb-3">Topic Summary</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {topics.slice(0, 6).map((topic) => {
-            const topicData = data.data.filter(d => d.topic === topic);
-            const totalProjects = topicData.reduce((sum, d) => sum + d.project_count, 0);
-            const totalFunding = topicData.reduce((sum, d) => sum + d.funding_amount, 0);
-            
-            return (
-              <div key={topic} className="bg-gray-50 p-3 rounded">
-                <h5 className="font-medium text-sm mb-2 truncate" title={topic}>{topic}</h5>
-                <div className="text-xs text-gray-600">
-                  <div>Total Projects: {totalProjects}</div>
-                  <div>Total Funding: €{totalFunding.toLocaleString()}</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
       </div>
     </div>
   );

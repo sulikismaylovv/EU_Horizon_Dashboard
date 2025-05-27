@@ -26,7 +26,7 @@ const FundingDistribution: React.FC = () => {
     try {
       setLoading(true)
       const res = await axios.get<DistributionResponse>(
-        `http://127.0.0.1:8000/analytics/funding-distribution?bin_count=${bins}`
+        `http://54.93.51.85:8000/analytics/funding-distribution?bin_count=${bins}`
       )
       setPlotData(res.data)
     } catch (err) {
@@ -75,19 +75,25 @@ const FundingDistribution: React.FC = () => {
           },
         ]}
         layout={{
-          title: { text: plotData.chart_title },
+          title: { text: plotData.chart_title, font: {size: 14} },
           xaxis: {
-            title: { text: plotData.x_axis_label },
+            title: { text: plotData.x_axis_label, font: {size: 12} },
             automargin: true,
             tickangle: -45,
+            tickfont: {size: 10}
           },
           yaxis: {
-            title: { text: plotData.y_axis_label },
+            title: { text: plotData.y_axis_label, font: {size: 12} },
             automargin: true,
+            tickfont: {size: 10}
           },
+          margin: { l: 60, r: 20, b: 80, t: 40, pad: 4 },
+          showlegend: false,
+          font: { size: 11 }
         }}
-        style={{ width: '100%', height: '500px' }}
-        config={{ responsive: true }}
+        style={{ width: '100%', height: '100%' }}
+        config={{ responsive: true, displayModeBar: false }}
+        useResizeHandler={true}
       />
     </div>
   )

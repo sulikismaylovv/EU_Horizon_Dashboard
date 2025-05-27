@@ -11,7 +11,7 @@ const MyComponent: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('http://127.0.0.1:8000/projects/analytics/sunburst');
+        const response = await fetch('http://54.93.51.85:8000/projects/analytics/sunburst');
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }

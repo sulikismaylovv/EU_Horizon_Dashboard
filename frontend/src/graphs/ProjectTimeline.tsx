@@ -26,7 +26,7 @@ const ProjectTimeline: React.FC = () => {
     try {
       setLoading(true)
       const res = await axios.get<ProjectTimelineResponse>(
-        `http://127.0.0.1:8000/analytics/project-timeline?metric=${selectedMetric}`
+        `http://54.93.51.85:8000/analytics/project-timeline?metric=${selectedMetric}`
       )
       setPlotData(res.data)
     } catch (err) {
@@ -80,12 +80,17 @@ const ProjectTimeline: React.FC = () => {
             automargin: true,
           },
           yaxis: {
-            title: { text: plotData.y_axis_label },
+            title: { text: plotData.y_axis_label, font: {size: 12} },
             automargin: true,
+            tickfont: {size: 10}
           },
+          margin: { l: 60, r: 20, b: 60, t: 40, pad: 4 },
+          showlegend: false,
+          font: { size: 11 }
         }}
-        style={{ width: '100%', height: '500px' }}
-        config={{ responsive: true }}
+        style={{ width: '100%', height: '100%' }}
+        config={{ responsive: true, displayModeBar: false }}
+        useResizeHandler={true}
       />
     </div>
   )

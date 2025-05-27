@@ -24,7 +24,7 @@ const ProgramDurationHeatmap: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const res = await axios.get<HeatmapResponse>('http://127.0.0.1:8000/analytics/program-duration-heatmap')
+        const res = await axios.get<HeatmapResponse>('http://54.93.51.85:8000/analytics/program-duration-heatmap')
         setPlotData(res.data)
       } catch (err) {
         console.error(err)
@@ -89,19 +89,24 @@ const ProgramDurationHeatmap: React.FC = () => {
         },
       ]}
       layout={{
-        title: { text: plotData.chart_title },
+        title: { text: plotData.chart_title, font: {size: 14} },
         xaxis: {
-          title: { text: plotData.x_axis_label },
+          title: { text: plotData.x_axis_label, font: {size: 12} },
           automargin: true,
           tickangle: -45,
+          tickfont: {size: 10}
         },
         yaxis: {
-          title: { text: plotData.y_axis_label },
+          title: { text: plotData.y_axis_label, font: {size: 12} },
           automargin: true,
+          tickfont: {size: 10}
         },
+        margin: { l: 80, r: 60, b: 80, t: 40, pad: 4 },
+        font: { size: 11 }
       }}
-      style={{ width: '100%', height: '600px' }}
-      config={{ responsive: true }}
+      style={{ width: '100%', height: '100%' }}
+      config={{ responsive: true, displayModeBar: false }}
+      useResizeHandler={true}
     />
   )
 }

@@ -18,7 +18,7 @@ const ProjectsByCountryBarChart: React.FC = () => {
     (async () => {
       try {
         // Expecting an array from the API
-        const res = await axios.get<CountryProjectData[]>('http://127.0.0.1:8000/analytics/projects-by-country') // Updated API endpoint
+        const res = await axios.get<CountryProjectData[]>('http://54.93.51.85:8000/analytics/projects-by-country') // Updated API endpoint
         
         // Remove the first element from the response data
         if (res.data && res.data.length > 0) {
@@ -57,20 +57,25 @@ const ProjectsByCountryBarChart: React.FC = () => {
         },
       ]}
       layout={{
-        title: {text:'Number of Projects per Country (excluding first entry)'}, 
+        title: {text:'Number of Projects per Country', font: {size: 14}}, 
         xaxis: {
-          title: {text:'Country Code'}, 
+          title: {text:'Country Code', font: {size: 12}}, 
           automargin: true,
+          tickangle: -45,
+          tickfont: {size: 10}
         },
         yaxis: {
-          title:{text: 'Number of Projects'}, // Updated axis title
+          title:{text: 'Number of Projects', font: {size: 12}}, 
           automargin: true,
+          tickfont: {size: 10}
         },
-        // You might want to adjust margins if labels are cut off
-        // margin: { l: 100, r: 50, b: 100, t: 50, pad: 4 }
+        margin: { l: 60, r: 20, b: 80, t: 40, pad: 4 },
+        showlegend: false,
+        font: { size: 11 }
       }}
-      style={{ width: '100%', height: '500px' }} // Adjust size as needed
-      config={{ responsive: true }} // Makes the plot responsive
+      style={{ width: '100%', height: '100%' }}
+      config={{ responsive: true, displayModeBar: false }}
+      useResizeHandler={true}
     />
   )
 }

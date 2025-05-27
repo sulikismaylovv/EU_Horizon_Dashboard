@@ -176,6 +176,8 @@ cython_debug/
 # Ignore raw files (located in data/raw) that are in the data/raw folder
 data/*
 
+node_modules/
+
 # VS Code settings
 .vscode/
 # VS Code extensions
@@ -192,3 +194,6 @@ data/*
 .classpath
 # NetBeans IDE
 nbproject/private/
+
+# anything in notebooks/lightning_logs
+notebooks/lightning_logs/

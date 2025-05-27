@@ -1,0 +1,357 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import Plot from 'react-plotly.js';
+
+interface ResearchFieldNetworkNode {
+  id: string;
+  label: string;
+  size: number;
+  publications: number;
+  funding: number;
+}
+
+interface NetworkEdge {
+  source: string;
+  target: string;
+  weight: number;
+}
+
+interface ResearchFieldNetworkResponse {
+  chart_title: string;
+  nodes: ResearchFieldNetworkNode[];
+  edges: NetworkEdge[];
+}
+
+const ResearchFieldNetwork: React.FC = () => {
+  const [data, setData] = useState<ResearchFieldNetworkResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'network' | 'sunburst' | 'ranking'>('ranking');
+  const [minProjects, setMinProjects] = useState(10);
+  const [maxNodes, setMaxNodes] = useState(50);
+  const [selectedMetric, setSelectedMetric] = useState<'size' | 'funding' | 'publications'>('size');
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response = await fetch('http://54.93.51.85:8000/analytics/research-field-network');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const result = await response.json();
+        setData(result);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  if (loading) return <div className="flex justify-center items-center h-64">Loading...</div>;
+  if (error) return <div className="text-red-500 text-center">Error: {error}</div>;
+  if (!data || !data.nodes.length) return <div className="text-center">No data available</div>;
+
+  // Generate network layout using a simple force-directed algorithm
+  const generateNetworkLayout = () => {
+    const nodes = data.nodes;
+    const edges = data.edges;
+    
+    // Initialize positions randomly
+    const positions: { [key: string]: { x: number; y: number } } = {};
+    nodes.forEach(node => {
+      positions[node.id] = {
+        x: Math.random() * 800,
+        y: Math.random() * 600
+      };
+    });
+
+    // Simple force-directed layout simulation
+    for (let iteration = 0; iteration < 50; iteration++) {
+      const forces: { [key: string]: { fx: number; fy: number } } = {};
+      
+      // Initialize forces
+      nodes.forEach(node => {
+        forces[node.id] = { fx: 0, fy: 0 };
+      });
+
+      // Repulsive forces between all nodes
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const nodeA = nodes[i];
+          const nodeB = nodes[j];
+          const dx = positions[nodeA.id].x - positions[nodeB.id].x;
+          const dy = positions[nodeA.id].y - positions[nodeB.id].y;
+          const distance = Math.sqrt(dx * dx + dy * dy) + 0.01;
+          const force = 1000 / (distance * distance);
+          
+          forces[nodeA.id].fx += (dx / distance) * force;
+          forces[nodeA.id].fy += (dy / distance) * force;
+          forces[nodeB.id].fx -= (dx / distance) * force;
+          forces[nodeB.id].fy -= (dy / distance) * force;
+        }
+      }
+
+      // Attractive forces along edges
+      edges.forEach(edge => {
+        const sourcePos = positions[edge.source];
+        const targetPos = positions[edge.target];
+        if (sourcePos && targetPos) {
+          const dx = targetPos.x - sourcePos.x;
+          const dy = targetPos.y - sourcePos.y;
+          const distance = Math.sqrt(dx * dx + dy * dy) + 0.01;
+          const force = distance * 0.01 * edge.weight;
+          
+          forces[edge.source].fx += (dx / distance) * force;
+          forces[edge.source].fy += (dy / distance) * force;
+          forces[edge.target].fx -= (dx / distance) * force;
+          forces[edge.target].fy -= (dy / distance) * force;
+        }
+      });
+
+      // Apply forces
+      nodes.forEach(node => {
+        positions[node.id].x += forces[node.id].fx * 0.1;
+        positions[node.id].y += forces[node.id].fy * 0.1;
+        
+        // Keep nodes within bounds
+        positions[node.id].x = Math.max(50, Math.min(750, positions[node.id].x));
+        positions[node.id].y = Math.max(50, Math.min(550, positions[node.id].y));
+      });
+    }
+
+    return positions;
+  };
+
+  const positions = generateNetworkLayout();
+
+  // Create network visualization data
+  const createNetworkData = () => {
+    // Create edge traces
+    const edge_x: (number | null)[] = [];
+    const edge_y: (number | null)[] = [];
+    
+    data.edges.forEach(edge => {
+      const sourcePos = positions[edge.source];
+      const targetPos = positions[edge.target];
+      if (sourcePos && targetPos) {
+        edge_x.push(sourcePos.x, targetPos.x, null);
+        edge_y.push(sourcePos.y, targetPos.y, null);
+      }
+    });
+
+    // Create node traces
+    const node_x = data.nodes.map(node => positions[node.id].x);
+    const node_y = data.nodes.map(node => positions[node.id].y);
+    const node_text = data.nodes.map(node => node.label.replace(/[\[\]"']/g, '').trim());
+    const node_size = data.nodes.map(node => Math.max(10, Math.min(50, node.size * 2)));
+    const node_color = data.nodes.map(node => node.funding);
+
+    return [
+      // Edge trace
+      {
+        x: edge_x,
+        y: edge_y,
+        mode: 'lines',
+        line: { width: 1, color: '#888' },
+        hoverinfo: 'none',
+        type: 'scatter',
+        showlegend: false
+      },
+      // Node trace
+      {
+        x: node_x,
+        y: node_y,
+        mode: 'markers',
+        marker: {
+          size: node_size,
+          color: node_color,
+          colorscale: 'Viridis',
+          showscale: true,
+          colorbar: {
+            title: { text: 'Total Funding (€)' },
+            thickness: 15,
+            len: 0.7
+          },
+          line: { width: 2, color: 'white' }
+        },
+        text: node_text,
+        textfont: { size: 10, color: 'black' },
+        hovertemplate: '<b>%{text}</b><br>' +
+                      'Projects: %{customdata[0]}<br>' +
+                      'Publications: %{customdata[1]}<br>' +
+                      'Funding: €%{customdata[2]:,.0f}<extra></extra>',
+        customdata: data.nodes.map(node => [node.size, node.publications, node.funding]),
+        type: 'scatter',
+        showlegend: false
+      }
+    ];
+  };
+
+  // Create sunburst chart data for research fields
+  const sunburstData = [{
+    type: 'sunburst' as const,
+    labels: data.nodes.map(n => n.label.replace(/[\[\]"']/g, '').trim()),
+    parents: data.nodes.map(() => ''), // All are root level for now
+    values: data.nodes.map(n => n.size),
+    hovertemplate: '<b>%{label}</b><br>Projects: %{value}<br>Publications: %{customdata[0]}<br>Funding: €%{customdata[1]:,.0f}<extra></extra>',
+    customdata: data.nodes.map(n => [n.publications, n.funding]),
+    maxdepth: 2
+  }];
+
+  // Bar chart of top fields
+  const topFields = data.nodes
+    .sort((a, b) => b.size - a.size)
+    .slice(0, 10);
+
+  const barData = [{
+    x: topFields.map(n => n.size),
+    y: topFields.map(n => n.label.replace(/[\[\]"']/g, '').trim()),
+    type: 'bar' as const,
+    orientation: 'h' as const,
+    marker: {
+      color: topFields.map(n => n.funding),
+      colorscale: 'Viridis' as const,
+      showscale: false
+    },
+    hovertemplate: '<b>%{y}</b><br>Projects: %{x}<br>Publications: %{customdata[0]}<br>Funding: €%{customdata[1]:,.0f}<extra></extra>',
+    customdata: topFields.map(n => [n.publications, n.funding])
+  }];
+
+  const networkData = createNetworkData();
+
+  return (
+    <div className="bg-white p-6 rounded-lg shadow-lg">
+      <h3 className="text-xl font-semibold mb-4">{data.chart_title}</h3>
+      
+      {/* Main Network Visualization */}
+      <div className="mb-8">
+        <h4 className="text-lg font-medium mb-3">Research Field Network Graph</h4>
+        <div className="h-96 border border-gray-200 rounded">
+          <Plot
+            data={[
+              // Edge trace
+              {
+                x: data.edges.reduce((acc: (number | null)[], edge) => {
+                  const sourcePos = positions[edge.source];
+                  const targetPos = positions[edge.target];
+                  if (sourcePos && targetPos) {
+                    acc.push(sourcePos.x, targetPos.x, null);
+                  }
+                  return acc;
+                }, []),
+                y: data.edges.reduce((acc: (number | null)[], edge) => {
+                  const sourcePos = positions[edge.source];
+                  const targetPos = positions[edge.target];
+                  if (sourcePos && targetPos) {
+                    acc.push(sourcePos.y, targetPos.y, null);
+                  }
+                  return acc;
+                }, []),
+                mode: 'lines',
+                line: { width: 1, color: '#888' },
+                hoverinfo: 'none',
+                type: 'scatter',
+                showlegend: false
+              },
+              // Node trace  
+              {
+                x: data.nodes.map(node => positions[node.id].x),
+                y: data.nodes.map(node => positions[node.id].y),
+                mode: 'markers',
+                marker: {
+                  size: data.nodes.map(node => Math.max(10, Math.min(40, node.size * 2))),
+                  color: data.nodes.map(node => node.funding),
+                  colorscale: 'Viridis',
+                  showscale: true,
+                  colorbar: {
+                    title: 'Total Funding (€)',
+                    thickness: 15,
+                    len: 0.7
+                  },
+                  line: { width: 2, color: 'white' }
+                },
+                text: data.nodes.map(node => node.label.replace(/[\[\]"']/g, '').trim()),
+                hovertemplate: '<b>%{text}</b><br>' +
+                              'Projects: %{customdata[0]}<br>' +
+                              'Publications: %{customdata[1]}<br>' +
+                              'Funding: €%{customdata[2]:,.0f}<extra></extra>',
+                customdata: data.nodes.map(node => [node.size, node.publications, node.funding]),
+                type: 'scatter',
+                showlegend: false
+              }
+            ]}
+            layout={{
+              title: { text: '', font: { size: 14 } },
+              showlegend: false,
+              hovermode: 'closest',
+              margin: { l: 20, r: 20, t: 20, b: 20 },
+              xaxis: { 
+                showgrid: false, 
+                zeroline: false, 
+                showticklabels: false,
+                range: [0, 800]
+              },
+              yaxis: { 
+                showgrid: false, 
+                zeroline: false, 
+                showticklabels: false,
+                range: [0, 600]
+              },
+              plot_bgcolor: 'rgba(0,0,0,0)',
+              paper_bgcolor: 'rgba(0,0,0,0)'
+            }}
+            config={{ responsive: true, displayModeBar: false }}
+            style={{ width: '100%', height: '100%' }}
+          />
+        </div>
+        <p className="text-sm text-gray-600 mt-2">
+          Network shows relationships between research fields. Node size indicates project count, 
+          color represents total funding, and connections show shared sub-fields.
+        </p>
+      </div>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Sunburst chart */}
+        <div>
+          <h4 className="text-lg font-medium mb-3">Research Field Distribution</h4>
+          <div className="h-80">
+            <Plot
+              data={sunburstData}
+              layout={{
+                title: { text: '' },
+                margin: { l: 0, r: 0, t: 0, b: 0 },
+                showlegend: false
+              }}
+              config={{ responsive: true, displayModeBar: false }}
+              style={{ width: '100%', height: '100%' }}
+            />
+          </div>
+        </div>
+
+        {/* Bar chart */}
+        <div>
+          <h4 className="text-lg font-medium mb-3">Top Research Fields by Project Count</h4>
+          <div className="h-80">
+            <Plot
+              data={barData}
+              layout={{
+                title: { text: '' },
+                xaxis: { title: { text: 'Number of Projects', font: { size: 12 } } },
+                yaxis: { title: { text: '', font: { size: 12 } }, automargin: true },
+                margin: { l: 150, r: 50, t: 20, b: 50 },
+                font: { size: 11 }
+              }}
+              config={{ responsive: true, displayModeBar: false }}
+              style={{ width: '100%', height: '100%' }}
+            />
+          </div>
+        </div>
+      </div>
+
+    </div>
+  );
+};
+
+export default ResearchFieldNetwork;

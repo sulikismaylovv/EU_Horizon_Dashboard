@@ -16,17 +16,36 @@ interface ProjectTimelineResponse {
   chart_type: string
 }
 
+interface CountryOption {
+  code: string
+  count: number
+}
+
 const ParticipationTrends: React.FC = () => {
   const [plotData, setPlotData] = useState<ProjectTimelineResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [country, setCountry] = useState('Germany')
+  const [country, setCountry] = useState('DE')
+  const [availableCountries, setAvailableCountries] = useState<CountryOption[]>([])
+  const [countriesLoading, setCountriesLoading] = useState(true)
+
+  const fetchAvailableCountries = async () => {
+    try {
+      setCountriesLoading(true)
+      const res = await axios.get<CountryOption[]>('http://54.93.51.85:8000/analytics/available-countries')
+      setAvailableCountries(res.data)
+    } catch (err) {
+      console.error('Failed to fetch available countries:', err)
+    } finally {
+      setCountriesLoading(false)
+    }
+  }
 
   const fetchData = async (selectedCountry: string) => {
     try {
       setLoading(true)
       const res = await axios.get<ProjectTimelineResponse>(
-        `http://127.0.0.1:8000/analytics/participation-trends?country=${encodeURIComponent(selectedCountry)}`
+        `http://54.93.51.85:8000/analytics/participation-trends?country=${encodeURIComponent(selectedCountry)}`
       )
       setPlotData(res.data)
     } catch (err) {
@@ -38,16 +57,16 @@ const ParticipationTrends: React.FC = () => {
   }
 
   useEffect(() => {
+    fetchAvailableCountries()
+    fetchData(country)
+  }, [])
+
+  useEffect(() => {
     fetchData(country)
   }, [country])
 
-  const handleCountryChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCountryChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setCountry(event.target.value)
-  }
-
-  const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault()
-    fetchData(country)
   }
 
   if (loading) return <p>Loading…</p>
@@ -59,18 +78,26 @@ const ParticipationTrends: React.FC = () => {
 
   return (
     <div>
-      <form onSubmit={handleSubmit} style={{ marginBottom: '20px' }}>
-        <label htmlFor="country-input">Country: </label>
-        <input
-          id="country-input"
-          type="text"
+      <div style={{ marginBottom: '20px' }}>
+        <label htmlFor="country-select" style={{ marginRight: '10px' }}>Country: </label>
+        <select
+          id="country-select"
           value={country}
           onChange={handleCountryChange}
-          placeholder="Enter country name..."
-          style={{ marginLeft: '10px', marginRight: '10px', padding: '5px' }}
-        />
-        <button type="submit">Update Chart</button>
-      </form>
+          style={{ padding: '5px', minWidth: '200px' }}
+          disabled={countriesLoading}
+        >
+          {countriesLoading ? (
+            <option>Loading countries...</option>
+          ) : (
+            availableCountries.map(countryOption => (
+              <option key={countryOption.code} value={countryOption.code}>
+                {countryOption.code} ({countryOption.count} organizations)
+              </option>
+            ))
+          )}
+        </select>
+      </div>
       <Plot
         data={[
           {
@@ -85,18 +112,24 @@ const ParticipationTrends: React.FC = () => {
           },
         ]}
         layout={{
-          title: { text: plotData.chart_title },
+          title: { text: plotData.chart_title, font: {size: 14} },
           xaxis: {
-            title: { text: plotData.x_axis_label },
+            title: { text: plotData.x_axis_label, font: {size: 12} },
             automargin: true,
+            tickfont: {size: 10}
           },
           yaxis: {
-            title: { text: plotData.y_axis_label },
+            title: { text: plotData.y_axis_label, font: {size: 12} },
             automargin: true,
+            tickfont: {size: 10}
           },
+          margin: { l: 60, r: 20, b: 60, t: 40, pad: 4 },
+          showlegend: false,
+          font: { size: 11 }
         }}
-        style={{ width: '100%', height: '500px' }}
-        config={{ responsive: true }}
+        style={{ width: '100%', height: '100%' }}
+        config={{ responsive: true, displayModeBar: false }}
+        useResizeHandler={true}
       />
     </div>
   )

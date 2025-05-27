@@ -15,7 +15,7 @@ const TopInstitutionsBarChart: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const res = await axios.get<InstitutionData[]>('http://127.0.0.1:8000/analytics/top-institutions-by-funding')
+        const res = await axios.get<InstitutionData[]>('http://54.93.51.85:8000/analytics/top-institutions-by-funding')
         // Remove the first element from the response data
         if (res.data && res.data.length > 0) {
           setPlotData(res.data.slice(1)) // Slice the array starting from the second element
@@ -53,18 +53,25 @@ const TopInstitutionsBarChart: React.FC = () => {
         },
       ]}
       layout={{
-        title: {text:'Top Institutions by EC Contribution (excluding first entry)'}, // Updated title
+        title: {text:'Top Institutions by EC Contribution', font: {size: 14}}, 
         xaxis: {
-          title:{text: 'Institution'},
+          title:{text: 'Institution', font: {size: 12}},
           automargin: true,
+          tickangle: -45,
+          tickfont: {size: 10}
         },
         yaxis: {
-          title:{text: 'EC Contribution (EUR)'},
+          title:{text: 'EC Contribution (EUR)', font: {size: 12}},
           automargin: true,
+          tickfont: {size: 10}
         },
+        margin: { l: 80, r: 20, b: 120, t: 40, pad: 4 },
+        showlegend: false,
+        font: { size: 11 }
       }}
-      style={{ width: '100%', height: '500px' }}
-      config={{ responsive: true }}
+      style={{ width: '100%', height: '100%' }}
+      config={{ responsive: true, displayModeBar: false }}
+      useResizeHandler={true}
     />
   )
 }

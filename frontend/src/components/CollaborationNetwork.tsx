@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Plot from 'react-plotly.js';
 
-interface ResearchFieldNetworkNode {
+interface NetworkNode {
   id: string;
   label: string;
   size: number;
-  publications: number;
-  funding: number;
+  group: string;
 }
 
 interface NetworkEdge {
@@ -15,31 +14,35 @@ interface NetworkEdge {
   weight: number;
 }
 
-interface ResearchFieldNetworkResponse {
+interface NetworkGraphResponse {
   chart_title: string;
-  nodes: ResearchFieldNetworkNode[];
+  nodes: NetworkNode[];
   edges: NetworkEdge[];
+  description?: string;
 }
 
-const ResearchFieldNetwork: React.FC = () => {
-  const [data, setData] = useState<ResearchFieldNetworkResponse | null>(null);
+const CollaborationNetwork: React.FC = () => {
+  const [data, setData] = useState<NetworkGraphResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'network' | 'sunburst' | 'ranking'>('ranking');
-  const [minProjects, setMinProjects] = useState(10);
-  const [maxNodes, setMaxNodes] = useState(50);
-  const [selectedMetric, setSelectedMetric] = useState<'size' | 'funding' | 'publications'>('size');
+  const [viewMode, setViewMode] = useState<'network' | 'ranking' | 'map'>('network');
+  const [minCollaborations, setMinCollaborations] = useState(2);
+  const [maxNodes, setMaxNodes] = useState(30);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('http://54.93.51.85:8000/analytics/research-field-network');
+        setLoading(true);
+        console.log('Fetching collaboration network data...');
+        const response = await fetch(`http://54.93.51.85:8000/analytics/collaboration-network?min_collaborations=${minCollaborations}`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const result = await response.json();
+        console.log('Collaboration network data received:', result);
         setData(result);
       } catch (err) {
+        console.error('Error fetching collaboration network data:', err);
         setError(err instanceof Error ? err.message : 'An error occurred');
       } finally {
         setLoading(false);
@@ -47,16 +50,15 @@ const ResearchFieldNetwork: React.FC = () => {
     };
 
     fetchData();
-  }, []);
+  }, [minCollaborations]);
 
   // Filter and process data based on user selections
   const processedData = useMemo(() => {
     if (!data) return null;
 
-    // Filter nodes based on minimum project count and exclude "other"
+    // Filter nodes based on collaboration count and sort by size
     const filteredNodes = data.nodes
-      .filter(node => node.size >= minProjects && node.id !== 'other')
-      .sort((a, b) => b[selectedMetric] - a[selectedMetric])
+      .sort((a, b) => b.size - a.size)
       .slice(0, maxNodes);
 
     // Create a set of filtered node IDs for edge filtering
@@ -64,19 +66,19 @@ const ResearchFieldNetwork: React.FC = () => {
 
     // Filter edges to only include connections between filtered nodes
     const filteredEdges = data.edges.filter(edge => 
-      nodeIds.has(edge.source) && nodeIds.has(edge.target)
+      nodeIds.has(edge.source) && nodeIds.has(edge.target) && edge.weight >= minCollaborations
     );
 
     return {
       nodes: filteredNodes,
       edges: filteredEdges
     };
-  }, [data, minProjects, maxNodes, selectedMetric]);
+  }, [data, minCollaborations, maxNodes]);
 
-  if (loading) return <div className="flex justify-center items-center h-64">Loading...</div>;
-  if (error) return <div className="text-red-500 text-center">Error: {error}</div>;
-  if (!data || !data.nodes.length) return <div className="text-center">No data available</div>;
-  if (!processedData) return <div className="text-center">No data available</div>;
+  if (loading) return <div className="flex justify-center items-center h-64">Loading collaboration network...</div>;
+  if (error) return <div className="text-red-500 text-center">Error loading collaboration network: {error}</div>;
+  if (!data || !data.nodes.length) return <div className="text-center">No collaboration data available</div>;
+  if (!processedData) return <div className="text-center">No processed collaboration data available</div>;
 
   // Generate circular layout for network visualization
   const generateCircularLayout = () => {
@@ -85,8 +87,8 @@ const ResearchFieldNetwork: React.FC = () => {
     
     const centerX = 400;
     const centerY = 300;
-    const radius = 200;
-    
+    const radius = 220;
+
     nodes.forEach((node, index) => {
       const angle = (2 * Math.PI * index) / nodes.length;
       positions[node.id] = {
@@ -121,7 +123,7 @@ const ResearchFieldNetwork: React.FC = () => {
       x: edge_x,
       y: edge_y,
       mode: 'lines' as const,
-      line: { width: 0.5, color: '#888' },
+      line: { width: edges.map(e => Math.min(5, e.weight / 5)), color: '#888' },
       hoverinfo: 'none' as const,
       type: 'scatter' as const,
       showlegend: false
@@ -133,31 +135,29 @@ const ResearchFieldNetwork: React.FC = () => {
       y: nodes.map(node => positions[node.id].y),
       mode: 'markers+text' as any,
       marker: {
-        size: nodes.map(node => Math.max(10, Math.min(30, node.size / 5))),
-        color: nodes.map(node => node[selectedMetric]),
-        colorscale: 'Viridis' as const,
+        size: nodes.map(node => Math.max(12, Math.min(40, node.size / 10))),
+        color: nodes.map(node => node.size),
+        colorscale: 'Blues' as const,
         showscale: true,
         colorbar: {
-          title: { 
-            text: selectedMetric === 'size' ? 'Projects' : 
-                  selectedMetric === 'funding' ? 'Funding (€)' : 'Publications'
-          },
+          title: { text: 'Project Count' },
           thickness: 15,
           len: 0.7
         } as any,
         line: { width: 2, color: 'white' }
       },
-      text: nodes.map(node => {
-        const label = node.label.replace(/[\[\]"']/g, '').trim();
-        return label.length > 20 ? label.substring(0, 17) + '...' : label;
-      }),
+      text: nodes.map(node => node.label),
       textposition: 'middle center' as const,
-      textfont: { size: 8, color: 'white' },
+      textfont: { size: 10, color: 'white', family: 'Arial Black' },
       hovertemplate: '<b>%{text}</b><br>' +
                     'Projects: %{customdata[0]}<br>' +
-                    'Publications: %{customdata[1]}<br>' +
-                    'Funding: €%{customdata[2]:,.0f}<extra></extra>',
-      customdata: nodes.map(node => [node.size, node.publications, node.funding]),
+                    'Collaborations: %{customdata[1]}<extra></extra>',
+      customdata: nodes.map(node => {
+        const collaborationCount = processedData.edges.filter(
+          e => e.source === node.id || e.target === node.id
+        ).length;
+        return [node.size, collaborationCount];
+      }),
       type: 'scatter' as const,
       showlegend: false
     };
@@ -167,47 +167,51 @@ const ResearchFieldNetwork: React.FC = () => {
 
   // Create ranking visualization (horizontal bar chart)
   const createRankingVisualization = (): any => {
-    const topFields = processedData.nodes.slice(0, 20);
+    const topCountries = processedData.nodes.slice(0, 20);
 
     return [{
-      x: topFields.map(n => n[selectedMetric]),
-      y: topFields.map(n => {
-        const label = n.label.replace(/[\[\]"']/g, '').trim();
-        return label.length > 40 ? label.substring(0, 37) + '...' : label;
-      }).reverse(),
+      x: topCountries.map(n => n.size),
+      y: topCountries.map(n => n.label).reverse(),
       type: 'bar' as const,
       orientation: 'h' as const,
       marker: {
-        color: topFields.map(n => n.funding).reverse(),
-        colorscale: 'Viridis' as const,
+        color: topCountries.map(n => n.size).reverse(),
+        colorscale: 'Blues' as const,
         showscale: false
       },
       hovertemplate: '<b>%{y}</b><br>' +
-                    'Projects: %{customdata[0]}<br>' +
-                    'Publications: %{customdata[1]}<br>' +
-                    'Funding: €%{customdata[2]:,.0f}<extra></extra>',
-      customdata: topFields.map(n => [n.size, n.publications, n.funding]).reverse()
+                    'Projects: %{x}<br>' +
+                    'Collaborations: %{customdata}<extra></extra>',
+      customdata: topCountries.map(node => {
+        const collaborationCount = processedData.edges.filter(
+          e => e.source === node.id || e.target === node.id
+        ).length;
+        return collaborationCount;
+      }).reverse()
     }];
   };
 
-  // Create sunburst visualization
-  const createSunburstVisualization = (): any => {
-    const nodes = processedData.nodes.slice(0, 30); // Limit for readability
+  // Create map visualization placeholder
+  const createMapVisualization = (): any => {
+    // This would be implemented with a proper world map
+    // For now, returning a simple scatter plot
+    const nodes = processedData.nodes;
     
     return [{
-      type: 'sunburst' as const,
-      labels: nodes.map(n => {
-        const label = n.label.replace(/[\[\]"']/g, '').trim();
-        return label.length > 25 ? label.substring(0, 22) + '...' : label;
-      }),
-      parents: nodes.map(() => ''),
-      values: nodes.map(n => n[selectedMetric]),
-      hovertemplate: '<b>%{label}</b><br>' +
-                    'Projects: %{customdata[0]}<br>' +
-                    'Publications: %{customdata[1]}<br>' +
-                    'Funding: €%{customdata[2]:,.0f}<extra></extra>',
-      customdata: nodes.map(n => [n.size, n.publications, n.funding]),
-      maxdepth: 2
+      type: 'scatter' as const,
+      mode: 'markers+text' as const,
+      x: nodes.map((_, i) => i % 10),
+      y: nodes.map((_, i) => Math.floor(i / 10)),
+      marker: {
+        size: nodes.map(node => Math.max(10, Math.min(30, node.size / 20))),
+        color: nodes.map(node => node.size),
+        colorscale: 'Blues' as const,
+        showscale: true
+      },
+      text: nodes.map(node => node.label),
+      textposition: 'middle center' as const,
+      hovertemplate: '<b>%{text}</b><br>Projects: %{customdata}<extra></extra>',
+      customdata: nodes.map(node => node.size)
     }];
   };
 
@@ -215,18 +219,18 @@ const ResearchFieldNetwork: React.FC = () => {
     switch (viewMode) {
       case 'network':
         return createNetworkVisualization();
-      case 'sunburst':
-        return createSunburstVisualization();
       case 'ranking':
         return createRankingVisualization();
+      case 'map':
+        return createMapVisualization();
       default:
-        return createRankingVisualization();
+        return createNetworkVisualization();
     }
   };
 
   const getLayoutConfig = () => {
     const baseLayout = {
-      margin: { l: viewMode === 'ranking' ? 200 : 50, r: 50, t: 50, b: 50 },
+      margin: { l: viewMode === 'ranking' ? 80 : 50, r: 50, t: 50, b: 50 },
       font: { size: 12 },
       showlegend: false
     };
@@ -235,7 +239,7 @@ const ResearchFieldNetwork: React.FC = () => {
       case 'network':
         return {
           ...baseLayout,
-          title: { text: 'Research Field Network', font: { size: 16 } },
+          title: { text: 'Country Collaboration Network', font: { size: 16 } },
           xaxis: { 
             showgrid: false, 
             zeroline: false, 
@@ -254,19 +258,16 @@ const ResearchFieldNetwork: React.FC = () => {
       case 'ranking':
         return {
           ...baseLayout,
-          title: { text: `Top Research Fields by ${selectedMetric === 'size' ? 'Project Count' : selectedMetric === 'funding' ? 'Funding' : 'Publications'}`, font: { size: 16 } },
-          xaxis: { 
-            title: { 
-              text: selectedMetric === 'size' ? 'Number of Projects' : 
-                    selectedMetric === 'funding' ? 'Total Funding (€)' : 'Total Publications'
-            }
-          },
+          title: { text: 'Top Countries by Project Count', font: { size: 16 } },
+          xaxis: { title: { text: 'Number of Projects' } },
           yaxis: { title: { text: '' }, automargin: true }
         };
-      case 'sunburst':
+      case 'map':
         return {
           ...baseLayout,
-          title: { text: 'Research Field Distribution', font: { size: 16 } }
+          title: { text: 'Country Collaboration Map', font: { size: 16 } },
+          xaxis: { showgrid: false, zeroline: false, showticklabels: false },
+          yaxis: { showgrid: false, zeroline: false, showticklabels: false }
         };
       default:
         return baseLayout;
@@ -288,45 +289,31 @@ const ResearchFieldNetwork: React.FC = () => {
               onChange={(e) => setViewMode(e.target.value as any)}
               className="px-2 py-1 border border-gray-300 rounded text-sm"
             >
-              <option value="ranking">Ranking</option>
               <option value="network">Network</option>
-              <option value="sunburst">Sunburst</option>
+              <option value="ranking">Ranking</option>
+              <option value="map">Map</option>
             </select>
           </div>
 
-          {/* Metric Selector */}
+          {/* Min Collaborations Filter */}
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-600">Metric</label>
+            <label className="text-xs font-medium text-gray-600">Min Collaborations</label>
             <select 
-              value={selectedMetric} 
-              onChange={(e) => setSelectedMetric(e.target.value as any)}
+              value={minCollaborations} 
+              onChange={(e) => setMinCollaborations(Number(e.target.value))}
               className="px-2 py-1 border border-gray-300 rounded text-sm"
             >
-              <option value="size">Projects</option>
-              <option value="funding">Funding</option>
-              <option value="publications">Publications</option>
-            </select>
-          </div>
-
-          {/* Min Projects Filter */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-600">Min Projects</label>
-            <select 
-              value={minProjects} 
-              onChange={(e) => setMinProjects(Number(e.target.value))}
-              className="px-2 py-1 border border-gray-300 rounded text-sm"
-            >
+              <option value={1}>1+</option>
+              <option value={2}>2+</option>
               <option value={5}>5+</option>
               <option value={10}>10+</option>
-              <option value={20}>20+</option>
-              <option value={50}>50+</option>
             </select>
           </div>
 
-          {/* Max Nodes Selector */}
+          {/* Max Countries Selector */}
           {viewMode === 'network' && (
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-600">Max Fields</label>
+              <label className="text-xs font-medium text-gray-600">Max Countries</label>
               <select 
                 value={maxNodes} 
                 onChange={(e) => setMaxNodes(Number(e.target.value))}
@@ -335,7 +322,7 @@ const ResearchFieldNetwork: React.FC = () => {
                 <option value={20}>20</option>
                 <option value={30}>30</option>
                 <option value={50}>50</option>
-                <option value={100}>100</option>
+                <option value={100}>All</option>
               </select>
             </div>
           )}
@@ -357,8 +344,12 @@ const ResearchFieldNetwork: React.FC = () => {
       {/* Statistics and Description */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
         <div className="bg-gray-50 p-3 rounded">
-          <div className="text-gray-600">Total Fields</div>
+          <div className="text-gray-600">Countries</div>
           <div className="text-xl font-semibold">{processedData.nodes.length}</div>
+        </div>
+        <div className="bg-gray-50 p-3 rounded">
+          <div className="text-gray-600">Collaborations</div>
+          <div className="text-xl font-semibold">{processedData.edges.length}</div>
         </div>
         <div className="bg-gray-50 p-3 rounded">
           <div className="text-gray-600">Total Projects</div>
@@ -366,27 +357,21 @@ const ResearchFieldNetwork: React.FC = () => {
             {processedData.nodes.reduce((sum, node) => sum + node.size, 0).toLocaleString()}
           </div>
         </div>
-        <div className="bg-gray-50 p-3 rounded">
-          <div className="text-gray-600">Total Funding</div>
-          <div className="text-xl font-semibold">
-            €{(processedData.nodes.reduce((sum, node) => sum + node.funding, 0) / 1e9).toFixed(1)}B
-          </div>
-        </div>
       </div>
 
       <div className="mt-4 text-sm text-gray-600">
         {viewMode === 'network' && (
-          <p>Network shows relationships between research fields. Node size indicates {selectedMetric}, and connections show shared research areas.</p>
+          <p>Network shows collaboration patterns between countries. Node size indicates project count, edge thickness shows collaboration strength.</p>
         )}
         {viewMode === 'ranking' && (
-          <p>Ranking shows top research fields ordered by {selectedMetric === 'size' ? 'project count' : selectedMetric}. Use filters to explore different aspects.</p>
+          <p>Ranking shows countries ordered by total project count. Hover for collaboration details.</p>
         )}
-        {viewMode === 'sunburst' && (
-          <p>Sunburst chart shows the relative distribution of research fields by {selectedMetric === 'size' ? 'project count' : selectedMetric}.</p>
+        {viewMode === 'map' && (
+          <p>Geographic representation of country participation. Node size represents project involvement.</p>
         )}
       </div>
     </div>
   );
 };
 
-export default ResearchFieldNetwork;
+export default CollaborationNetwork;

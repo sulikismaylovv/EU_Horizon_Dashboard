@@ -26,7 +26,7 @@ const EfficiencyBubbleChart: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const res = await axios.get<BubbleChartResponse>('http://127.0.0.1:8000/analytics/efficiency-bubble-chart')
+        const res = await axios.get<BubbleChartResponse>('http://54.93.51.85:8000/analytics/efficiency-bubble-chart')
         setPlotData(res.data)
       } catch (err) {
         console.error(err)
@@ -77,15 +77,17 @@ const EfficiencyBubbleChart: React.FC = () => {
     <Plot
       data={traces}
       layout={{
-        title: { text: plotData.chart_title },
+        title: { text: plotData.chart_title, font: {size: 14} },
         xaxis: {
-          title: { text: plotData.x_axis_label },
+          title: { text: plotData.x_axis_label, font: {size: 12} },
           automargin: true,
-          type: 'log', // Log scale for cost data
+          type: 'log',
+          tickfont: {size: 10}
         },
         yaxis: {
-          title: { text: plotData.y_axis_label },
+          title: { text: plotData.y_axis_label, font: {size: 12} },
           automargin: true,
+          tickfont: {size: 10}
         },
         hovermode: 'closest',
         showlegend: true,
@@ -93,11 +95,15 @@ const EfficiencyBubbleChart: React.FC = () => {
           x: 1,
           y: 1,
           xanchor: 'left',
-          yanchor: 'top'
-        }
+          yanchor: 'top',
+          font: {size: 10}
+        },
+        margin: { l: 60, r: 120, b: 60, t: 40, pad: 4 },
+        font: { size: 11 }
       }}
-      style={{ width: '100%', height: '600px' }}
-      config={{ responsive: true }}
+      style={{ width: '100%', height: '100%' }}
+      config={{ responsive: true, displayModeBar: false }}
+      useResizeHandler={true}
     />
   )
 }
