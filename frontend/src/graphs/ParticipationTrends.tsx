@@ -32,7 +32,7 @@ const ParticipationTrends: React.FC = () => {
   const fetchAvailableCountries = async () => {
     try {
       setCountriesLoading(true)
-      const res = await axios.get<CountryOption[]>('http://127.0.0.1:8000/analytics/available-countries')
+      const res = await axios.get<CountryOption[]>('http://54.93.51.85:8000/analytics/available-countries')
       setAvailableCountries(res.data)
     } catch (err) {
       console.error('Failed to fetch available countries:', err)
@@ -45,7 +45,7 @@ const ParticipationTrends: React.FC = () => {
     try {
       setLoading(true)
       const res = await axios.get<ProjectTimelineResponse>(
-        `http://127.0.0.1:8000/analytics/participation-trends?country=${encodeURIComponent(selectedCountry)}`
+        `http://54.93.51.85:8000/analytics/participation-trends?country=${encodeURIComponent(selectedCountry)}`
       )
       setPlotData(res.data)
     } catch (err) {
