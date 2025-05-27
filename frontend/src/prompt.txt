@@ -22,7 +22,7 @@ const SunburstDataViewer: React.FC = () => {
       try {
         setLoading(true);
         setError(null);
-        const response = await axios.get<SunburstAPIData>('http://127.0.0.1:8000/projects/analytics/sunburst');
+        const response = await axios.get<SunburstAPIData>('http://54.93.51.85:8000/projects/analytics/sunburst');
         setData(response.data);
       } catch (err) {
 

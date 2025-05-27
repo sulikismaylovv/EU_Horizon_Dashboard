@@ -26,7 +26,7 @@ const EfficiencyBubbleChart: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const res = await axios.get<BubbleChartResponse>('http://127.0.0.1:8000/analytics/efficiency-bubble-chart')
+        const res = await axios.get<BubbleChartResponse>('http://54.93.51.85:8000/analytics/efficiency-bubble-chart')
         setPlotData(res.data)
       } catch (err) {
         console.error(err)

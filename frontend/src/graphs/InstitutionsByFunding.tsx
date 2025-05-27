@@ -15,7 +15,7 @@ const TopInstitutionsBarChart: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const res = await axios.get<InstitutionData[]>('http://127.0.0.1:8000/analytics/top-institutions-by-funding')
+        const res = await axios.get<InstitutionData[]>('http://54.93.51.85:8000/analytics/top-institutions-by-funding')
         // Remove the first element from the response data
         if (res.data && res.data.length > 0) {
           setPlotData(res.data.slice(1)) // Slice the array starting from the second element

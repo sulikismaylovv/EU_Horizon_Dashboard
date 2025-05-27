@@ -26,7 +26,7 @@ const FundingDistribution: React.FC = () => {
     try {
       setLoading(true)
       const res = await axios.get<DistributionResponse>(
-        `http://127.0.0.1:8000/analytics/funding-distribution?bin_count=${bins}`
+        `http://54.93.51.85:8000/analytics/funding-distribution?bin_count=${bins}`
       )
       setPlotData(res.data)
     } catch (err) {

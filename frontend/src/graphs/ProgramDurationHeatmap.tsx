@@ -24,7 +24,7 @@ const ProgramDurationHeatmap: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const res = await axios.get<HeatmapResponse>('http://127.0.0.1:8000/analytics/program-duration-heatmap')
+        const res = await axios.get<HeatmapResponse>('http://54.93.51.85:8000/analytics/program-duration-heatmap')
         setPlotData(res.data)
       } catch (err) {
         console.error(err)

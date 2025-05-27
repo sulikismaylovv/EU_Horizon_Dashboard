@@ -18,7 +18,7 @@ const ProjectsByCountryBarChart: React.FC = () => {
     (async () => {
       try {
         // Expecting an array from the API
-        const res = await axios.get<CountryProjectData[]>('http://127.0.0.1:8000/analytics/projects-by-country') // Updated API endpoint
+        const res = await axios.get<CountryProjectData[]>('http://54.93.51.85:8000/analytics/projects-by-country') // Updated API endpoint
         
         // Remove the first element from the response data
         if (res.data && res.data.length > 0) {

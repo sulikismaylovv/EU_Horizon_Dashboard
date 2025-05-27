@@ -11,7 +11,7 @@ const SunburstDataViewer: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const res = await axios.get<SunburstAPIData>('http://127.0.0.1:8000/projects/analytics/sunburst')
+        const res = await axios.get<SunburstAPIData>('http://54.93.51.85:8000/projects/analytics/sunburst')
         setData(res.data)
       } catch (err) {
         console.error(err)

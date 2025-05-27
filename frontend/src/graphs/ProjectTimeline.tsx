@@ -26,7 +26,7 @@ const ProjectTimeline: React.FC = () => {
     try {
       setLoading(true)
       const res = await axios.get<ProjectTimelineResponse>(
-        `http://127.0.0.1:8000/analytics/project-timeline?metric=${selectedMetric}`
+        `http://54.93.51.85:8000/analytics/project-timeline?metric=${selectedMetric}`
       )
       setPlotData(res.data)
     } catch (err) {
