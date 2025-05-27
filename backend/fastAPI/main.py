@@ -1077,7 +1077,7 @@ async def get_collaboration_network(
 
 @app.get("/analytics/funding-distribution", response_model=DistributionResponse, tags=["Analytics"])
 async def get_funding_distribution(
-    bin_count: int = Query(20, ge=5, le=50, description="Number of bins for the distribution")
+    bin_count: int = Query(10, ge=5, le=20, description="Number of bins for the distribution")
 ):
     """
     Returns funding distribution data suitable for histogram visualization.
@@ -1094,15 +1094,49 @@ async def get_funding_distribution(
         df = df.dropna(subset=['ec_max_contribution'])
         df = df[df['ec_max_contribution'] > 0]
 
-        # Create bins
-        hist, bin_edges = pd.cut(df['ec_max_contribution'], bins=bin_count, retbins=True, include_lowest=True)
-        bin_counts = hist.value_counts().sort_index()
+        # Create meaningful funding ranges instead of equal-width bins
+        # Use quantile-based binning for better distribution
+        try:
+            # Define meaningful funding ranges
+            funding_ranges = [
+                (0, 100000, "€0 - €100K"),
+                (100000, 500000, "€100K - €500K"),
+                (500000, 1000000, "€500K - €1M"),
+                (1000000, 2500000, "€1M - €2.5M"),
+                (2500000, 5000000, "€2.5M - €5M"),
+                (5000000, 10000000, "€5M - €10M"),
+                (10000000, 25000000, "€10M - €25M"),
+                (25000000, 50000000, "€25M - €50M"),
+                (50000000, 100000000, "€50M - €100M"),
+                (100000000, float('inf'), "€100M+")
+            ]
+            
+            result_data = []
+            for min_val, max_val, label in funding_ranges:
+                if max_val == float('inf'):
+                    count = len(df[df['ec_max_contribution'] >= min_val])
+                else:
+                    count = len(df[(df['ec_max_contribution'] >= min_val) & (df['ec_max_contribution'] < max_val)])
+                
+                if count > 0:  # Only include bins with data
+                    avg_value = (min_val + (max_val if max_val != float('inf') else min_val * 2)) / 2
+                    result_data.append(DistributionData(label=label, value=float(avg_value), count=int(count)))
 
-        result_data = []
-        for interval, count in bin_counts.items():
-            label = f"€{interval.left:,.0f} - €{interval.right:,.0f}"
-            avg_value = (interval.left + interval.right) / 2
-            result_data.append(DistributionData(label=label, value=float(avg_value), count=int(count)))
+        except Exception as fallback_error:
+            # Fallback to quantile-based binning if the above fails
+            quantiles = np.linspace(0, 1, bin_count + 1)
+            bin_edges = df['ec_max_contribution'].quantile(quantiles).values
+            bin_edges[-1] = bin_edges[-1] * 1.001  # Ensure the maximum value is included
+            
+            hist = pd.cut(df['ec_max_contribution'], bins=bin_edges, include_lowest=True)
+            bin_counts = hist.value_counts().sort_index()
+
+            result_data = []
+            for interval, count in bin_counts.items():
+                if count > 0:  # Only include non-empty bins
+                    label = f"€{interval.left:,.0f} - €{interval.right:,.0f}"
+                    avg_value = (interval.left + interval.right) / 2
+                    result_data.append(DistributionData(label=label, value=float(avg_value), count=int(count)))
 
         return DistributionResponse(
             chart_title="Project Funding Distribution",
