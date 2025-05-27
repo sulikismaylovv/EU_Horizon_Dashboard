@@ -23,7 +23,7 @@ const ResearchOutputTimeline: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('http://localhost:8000/analytics/research-output-timeline');
+        const response = await fetch('http://54.93.51.85:8000/analytics/research-output-timeline');
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }

@@ -33,7 +33,7 @@ const ResearchFieldNetwork: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('http://localhost:8000/analytics/research-field-network');
+        const response = await fetch('http://54.93.51.85:8000/analytics/research-field-network');
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }

@@ -3,7 +3,7 @@
 import axios from 'axios'; // This import statement makes it a module
 
 // Ensure REACT_APP_API_URL is defined in your .env file for your React app
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://54.93.51.85:8000/api/v1';
 
 // Exporting the interface
 export interface SunburstData {

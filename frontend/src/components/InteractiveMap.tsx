@@ -118,7 +118,7 @@ const InteractiveMap: React.FC = () => {
           }
         });
 
-        const response = await fetch(`http://localhost:8000/analytics/interactive-map?${params.toString()}`);
+        const response = await fetch(`http://54.93.51.85:8000/analytics/interactive-map?${params.toString()}`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }

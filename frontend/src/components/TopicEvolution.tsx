@@ -23,7 +23,7 @@ const TopicEvolution: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('http://localhost:8000/analytics/topic-evolution');
+        const response = await fetch('http://54.93.51.85:8000/analytics/topic-evolution');
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
