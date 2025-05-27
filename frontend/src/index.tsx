@@ -18,13 +18,12 @@ import TopicEvolution from './components/TopicEvolution';
 import ProjectSeasonality from './components/ProjectSeasonality';
 import ResearchFieldNetwork from './components/ResearchFieldNetwork';
 // import CollaborationNetwork from './components/CollaborationNetwork';
-import ResearchOutputTimeline from './components/ResearchOutputTimeline';
+// import ResearchOutputTimeline from './components/ResearchOutputTimeline';
 import InteractiveMap from './components/InteractiveMap';
 
 
   const Dashboard = () => {
     const [category, setCategory] = useState<'research'|'program'|'monitoring'|'map'>('research');
-    const [filtersVisible, setFiltersVisible] = useState(false);
     const [expandedChart, setExpandedChart] = useState<string | null>(null);
 
     // Handle ESC key to close modal
@@ -95,8 +94,6 @@ import InteractiveMap from './components/InteractiveMap';
           return <ResearchFieldNetwork />;
         case 'collaboration-network':
           return <ImpactAnalysis />;
-        case 'research-output-timeline':
-          return <ResearchOutputTimeline />;
         case 'funding-distribution':
           return <FundingDistribution />;
         case 'efficiency-analysis':
@@ -155,17 +152,14 @@ import InteractiveMap from './components/InteractiveMap';
                   <EcByCountryBarChart />
                 </ChartCard>
 
-                <ChartCard id="research-field-network" title="Research Field Network" fullWidth>
-                  <ResearchFieldNetwork />
-                </ChartCard>
-
                 <ChartCard id="collaboration-network" title="Impact Analysis" fullWidth>
                   <ImpactAnalysis />
                 </ChartCard>
 
-                <ChartCard id="research-output-timeline" title="Research Output Timeline" fullWidth>
-                  <ResearchOutputTimeline />
+                <ChartCard id="research-field-network" title="Research Field Network" fullWidth>
+                  <ResearchFieldNetwork />
                 </ChartCard>
+
               </div>
             </>
           );
@@ -277,7 +271,7 @@ import InteractiveMap from './components/InteractiveMap';
               </button>
             </nav>
 
-            <div className="action-buttons">
+            {/* <div className="action-buttons">
               <button 
                 className="action-button"
                 onClick={() => setFiltersVisible(!filtersVisible)}
@@ -290,7 +284,7 @@ import InteractiveMap from './components/InteractiveMap';
               <button className="action-button primary">
                 📈 Generate Report
               </button>
-            </div>
+            </div> */}
           </div>
         </header>
 
@@ -299,83 +293,33 @@ import InteractiveMap from './components/InteractiveMap';
           {/* Stats Overview */}
           <section className="stats-overview">
             <div className="stat-card">
-              <div className="stat-value">€95.5B</div>
-              <div className="stat-label">Total Funding</div>
-              <div className="stat-change positive">+12.3% from last year</div>
+              <div className="stat-value">€21.5B</div>
+              <div className="stat-label">Total EC Funding</div>
+              <div className="stat-change negative">-25.0% from last year</div>
             </div>
             <div className="stat-card">
-              <div className="stat-value">42,891</div>
+              <div className="stat-value">14,820</div>
               <div className="stat-label">Active Projects</div>
-              <div className="stat-change positive">+8.7% from last year</div>
+              <div className="stat-change negative">-3.3% from last year</div>
             </div>
             <div className="stat-card">
-              <div className="stat-value">15,234</div>
-              <div className="stat-label">Research Institutions</div>
-              <div className="stat-change positive">+5.2% from last year</div>
+              <div className="stat-value">101,076</div>
+              <div className="stat-label">Research Organizations</div>
+              <div className="stat-change positive">Participating entities</div>
             </div>
             <div className="stat-card">
-              <div className="stat-value">27</div>
+              <div className="stat-value">26</div>
               <div className="stat-label">EU Countries</div>
-              <div className="stat-change">Participating nations</div>
+              <div className="stat-change">Member states participating</div>
             </div>
             <div className="stat-card">
-              <div className="stat-value">186,432</div>
+              <div className="stat-value">24,150</div>
               <div className="stat-label">Publications</div>
-              <div className="stat-change positive">+15.8% from last year</div>
+              <div className="stat-change positive">Research outputs</div>
             </div>
           </section>
 
-          {/* Filters Section */}
-          {filtersVisible && (
-            <section className="filter-section">
-              <div className="filter-header">
-                <h3 className="filter-title">Filters & Controls</h3>
-                <button 
-                  className="filter-toggle"
-                  onClick={() => setFiltersVisible(false)}
-                >
-                  Hide Filters
-                </button>
-              </div>
-              <div className="filter-controls">
-                <div className="filter-group">
-                  <label className="filter-label">Year Range</label>
-                  <select className="filter-select">
-                    <option>2021-2024</option>
-                    <option>2020-2023</option>
-                    <option>2019-2022</option>
-                  </select>
-                </div>
-                <div className="filter-group">
-                  <label className="filter-label">Country</label>
-                  <select className="filter-select">
-                    <option>All Countries</option>
-                    <option>Germany</option>
-                    <option>France</option>
-                    <option>Italy</option>
-                  </select>
-                </div>
-                <div className="filter-group">
-                  <label className="filter-label">Research Field</label>
-                  <select className="filter-select">
-                    <option>All Fields</option>
-                    <option>Information Technology</option>
-                    <option>Life Sciences</option>
-                    <option>Environmental Science</option>
-                  </select>
-                </div>
-                <div className="filter-group">
-                  <label className="filter-label">Funding Range</label>
-                  <select className="filter-select">
-                    <option>All Amounts</option>
-                    <option>€1M - €10M</option>
-                    <option>€10M - €100M</option>
-                    <option>€100M+</option>
-                  </select>
-                </div>
-              </div>
-            </section>
-          )}
+
 
           {/* Charts Content */}
           {renderCategoryContent()}
