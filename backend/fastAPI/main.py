@@ -25,14 +25,19 @@ app = FastAPI(
     description="API to fetch project data and analytics from Supabase.",
     version="1.0.0"
 )
+# CORS origins - supports multiple environments
 origins = [
-    "http://localhost:3001",
-    "http://localhost:3000",  # Local development
-        # Local development
+    "http://localhost:3000",    # Local development
+    "http://localhost:3001",    # Alternative local port
+    "http://127.0.0.1:3000",    # Local IP
+    "http://127.0.0.1:3001",    # Alternative local IP
+    "https://your-frontend-domain.com",  # Replace with your actual domain
+    # Add more specific origins as needed
 ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # Specifies the origins that are allowed to make requests.
+    allow_origins=["*"],    # Allow all origins (for development/testing)
     allow_credentials=True, # Indicates that cookies should be supported for cross-origin requests.
     allow_methods=["*"],    # Allows all common HTTP methods (GET, POST, PUT, DELETE, etc.).
                             # You can specify methods: ["GET", "POST"]
