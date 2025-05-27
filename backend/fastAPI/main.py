@@ -245,6 +245,72 @@ class SeasonalityResponse(BaseModel):
     data: List[SeasonalityData]
     chart_type: str = "polar"
 
+class MapOrganizationData(BaseModel):
+    id: int
+    name: str
+    country: Optional[str] = None
+    iso_alpha_3: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    activity_type: Optional[str] = None
+    role: Optional[str] = None
+    ec_contribution: Optional[float] = None
+
+class MapProjectData(BaseModel):
+    id: int
+    acronym: Optional[str] = None
+    title: Optional[str] = None
+    ec_max_contribution: Optional[float] = None
+    start_year: Optional[int] = None
+    funding_scheme: Optional[str] = None
+    field_class: Optional[str] = None
+    field: Optional[str] = None
+    sub_field: Optional[str] = None
+    niche: Optional[str] = None
+    coordinator_name: Optional[str] = None
+
+class CountrySummaryData(BaseModel):
+    country: str
+    iso_alpha_3: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    total_contribution: float
+    project_count: int
+    log_contribution: float
+    euros_per_100k_inhabitants: Optional[float] = None
+    log_contribution_per_100k: Optional[float] = None
+
+class CollaborationEdge(BaseModel):
+    org1_name: str
+    org2_name: str
+    org1_lat: Optional[float] = None
+    org1_lon: Optional[float] = None
+    org2_lat: Optional[float] = None
+    org2_lon: Optional[float] = None
+    project_id: int
+    project_acronym: Optional[str] = None
+    project_title: Optional[str] = None
+    coordinator_name: Optional[str] = None
+
+class MapFilters(BaseModel):
+    country: Optional[str] = None
+    funding_scheme: Optional[str] = None
+    start_year: Optional[int] = None
+    field_class: Optional[List[str]] = None
+    field: Optional[List[str]] = None
+    sub_field: Optional[List[str]] = None
+    niche: Optional[List[str]] = None
+    activity_type: Optional[str] = None
+    role: Optional[str] = None
+
+class InteractiveMapResponse(BaseModel):
+    country_summary: List[CountrySummaryData]
+    organizations: List[MapOrganizationData]
+    projects: List[MapProjectData]
+    collaboration_edges: List[CollaborationEdge]
+    table_data: List[Dict[str, Any]]
+    available_filters: Dict[str, List[str]]
+
 # --- FastAPI Endpoints ---
 
 @app.get("/")
@@ -1510,3 +1576,451 @@ async def get_available_countries():
     except Exception as e:
         print(f"Error fetching available countries: {e}")
         raise HTTPException(status_code=500, detail=f"Error fetching available countries: {str(e)}")
+
+# --- Interactive Map Models and Endpoints ---
+
+# Add new Pydantic models for the interactive map functionality
+class MapOrganizationData(BaseModel):
+    id: int
+    name: str
+    country: Optional[str] = None
+    iso_alpha_3: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    activity_type: Optional[str] = None
+    role: Optional[str] = None
+    ec_contribution: Optional[float] = None
+
+class MapProjectData(BaseModel):
+    id: int
+    acronym: Optional[str] = None
+    title: Optional[str] = None
+    ec_max_contribution: Optional[float] = None
+    start_year: Optional[int] = None
+    funding_scheme: Optional[str] = None
+    field_class: Optional[str] = None
+    field: Optional[str] = None
+    sub_field: Optional[str] = None
+    niche: Optional[str] = None
+    coordinator_name: Optional[str] = None
+
+class CountrySummaryData(BaseModel):
+    country: str
+    iso_alpha_3: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    total_contribution: float
+    project_count: int
+    log_contribution: float
+    euros_per_100k_inhabitants: Optional[float] = None
+    log_contribution_per_100k: Optional[float] = None
+
+class CollaborationEdge(BaseModel):
+    org1_name: str
+    org2_name: str
+    org1_lat: Optional[float] = None
+    org1_lon: Optional[float] = None
+    org2_lat: Optional[float] = None
+    org2_lon: Optional[float] = None
+    project_id: int
+    project_acronym: Optional[str] = None
+    project_title: Optional[str] = None
+    coordinator_name: Optional[str] = None
+
+class MapFilters(BaseModel):
+    country: Optional[str] = None
+    funding_scheme: Optional[str] = None
+    start_year: Optional[int] = None
+    field_class: Optional[List[str]] = None
+    field: Optional[List[str]] = None
+    sub_field: Optional[List[str]] = None
+    niche: Optional[List[str]] = None
+    activity_type: Optional[str] = None
+    role: Optional[str] = None
+
+class InteractiveMapResponse(BaseModel):
+    country_summary: List[CountrySummaryData]
+    organizations: List[MapOrganizationData]
+    projects: List[MapProjectData]
+    collaboration_edges: List[CollaborationEdge]
+    table_data: List[Dict[str, Any]]
+    available_filters: Dict[str, List[str]]
+
+# Add the new endpoint for the interactive map
+@app.get("/analytics/interactive-map", response_model=InteractiveMapResponse, tags=["Analytics"])
+async def get_interactive_map_data(
+    country: Optional[str] = Query(None, description="Filter by country ISO2 code"),
+    funding_scheme: Optional[str] = Query(None, description="Filter by funding scheme"),
+    start_year: Optional[int] = Query(None, description="Filter by project start year"),
+    field_class: Optional[str] = Query(None, description="Filter by field class"),
+    field: Optional[str] = Query(None, description="Filter by field"),
+    sub_field: Optional[str] = Query(None, description="Filter by sub field"),
+    niche: Optional[str] = Query(None, description="Filter by niche"),
+    activity_type: Optional[str] = Query(None, description="Filter by organization activity type"),
+    role: Optional[str] = Query(None, description="Filter by organization role"),
+    limit: Optional[int] = Query(5000, description="Limit number of project_organizations to fetch")
+):
+    """
+    Fetches data for the interactive map visualization including:
+    - Country summary with funding totals and project counts
+    - Organization locations and details
+    - Project information
+    - Collaboration edges between organizations
+    - Available filter options
+    """
+    try:
+        import numpy as np
+        import ast
+        
+        # Define country centroids (ISO3 codes with lat/lon)
+        country_centroids_iso3 = {
+            'GBR': (55.378051, -3.435973), 'CHE': (46.818188, 8.227512), 'FRA': (46.603354, 1.888334),
+            'AUS': (-25.274398, 133.775136), 'FIN': (61.92411, 25.748151), 'DNK': (56.26392, 9.501785),
+            'ESP': (40.463667, -3.74922), 'SVN': (46.151241, 14.995463), 'LTU': (55.169438, 23.881275),
+            'POL': (51.919438, 19.145136), 'NLD': (52.132633, 5.291266), 'PRT': (39.399872, -8.224454),
+            'BEL': (50.503887, 4.469936), 'DEU': (51.165691, 10.451526), 'USA': (37.09024, -95.712891),
+            'NOR': (60.472024, 8.468946), 'TUR': (38.963745, 35.243322), 'ZAF': (-30.559482, 22.937506),
+            'SVK': (48.669026, 19.699024), 'BGR': (42.733883, 25.48583), 'ROU': (45.943161, 24.96676),
+            'GRC': (39.074208,  21.824312), 'ISR': (31.046051, 34.851612), 'ITA': (41.87194, 12.56738),
+            'EST': (58.595272, 25.013607), 'IRL': (53.41291, -8.24389), 'HUN': (47.162494, 19.503304),
+            'CZE': (49.817492, 15.472962), 'AUT': (47.516231, 14.550072), 'LVA': (56.879635, 24.603189),
+            'UKR': (48.379433, 31.16558), 'SWE': (60.128161, 18.643501), 'CYP': (35.126413, 33.429859),
+            'MLT': (35.937496, 14.375416), 'LUX': (49.815273, 6.129583), 'CHN': (35.86166, 104.195397),
+            'IND': (20.593684, 78.96288), 'KOR': (35.907757, 127.766922), 'SRB': (44.016521, 21.005859),
+            'EGY': (26.820553, 30.802498), 'ARG': (-38.416097, -63.616672), 'HRV': (45.1, 15.2),
+            'ARM': (40.069099, 45.038189), 'BRA': (-14.235004, -51.92528), 'CAN': (56.130366, -106.346771),
+            'TUN': (33.886917, 9.537499), 'ISL': (64.963051, -19.020835), 'ALB': (41.153332, 20.168331),
+            'MEX': (23.634501, -102.552784), 'MNE': (42.708678, 19.37439), 'JPN': (36.204824, 138.252924),
+            'NZL': (-40.900557, 174.885971), 'SGP': (1.352083, 103.819836), 'MYS': (4.210484, 101.975766),
+            'THA': (15.870032, 100.992541), 'VNM': (14.058324, 108.277199), 'IDN': (-0.789275, 113.921327),
+            'PHL': (12.879721, 121.774017), 'HKG': (22.396428, 114.109497), 'TWN': (23.69781, 120.960515)
+        }
+
+        # Population data for per capita calculations (simplified subset)
+        country_populations = {
+            'GBR': 67886011, 'FRA': 65273511, 'DEU': 83783942, 'ITA': 60461826, 'ESP': 46754778,
+            'POL': 37846611, 'ROU': 19237691, 'NLD': 17134872, 'BEL': 11589623, 'GRC': 10423054,
+            'CZE': 10708981, 'PRT': 10196709, 'HUN': 9660351, 'SWE': 10099265, 'AUT': 9006398,
+            'BGR': 6948445, 'CHE': 8654622, 'DNK': 5792202, 'FIN': 5540720, 'SVK': 5459642,
+            'NOR': 5421241, 'IRL': 4937786, 'HRV': 4105267, 'SVN': 2078938, 'LVA': 1886198,
+            'EST': 1326535, 'CYP': 1207359, 'LUX': 625978, 'MLT': 441543
+        }
+
+        def iso2_to_iso3(iso2):
+            """Convert ISO2 country code to ISO3"""
+            import pycountry
+            try:
+                return pycountry.countries.get(alpha_2=iso2).alpha_3
+            except:
+                return None
+
+        # 1. Fetch project_organizations data with limit to avoid overwhelming the connection
+        po_query = supabase.table("project_organizations").select("*").limit(limit)
+        po_response = po_query.execute()
+        project_organizations_data = po_response.data or []
+
+        if not project_organizations_data:
+            return InteractiveMapResponse(
+                country_summary=[],
+                organizations=[],
+                projects=[],
+                collaboration_edges=[],
+                table_data=[],
+                available_filters={}
+            )
+
+        # 2. Fetch organizations data separately with batching
+        org_ids = [po["organization_id"] for po in project_organizations_data]
+        
+        # Batch process to avoid connection issues
+        batch_size = 1000
+        organizations_raw = []
+        for i in range(0, len(org_ids), batch_size):
+            batch_ids = org_ids[i:i + batch_size]
+            batch_response = supabase.table("organizations").select("*").in_("id", batch_ids).execute()
+            if batch_response.data:
+                organizations_raw.extend(batch_response.data)
+        
+        # Create a mapping of organization_id to organization data
+        org_map = {org["id"]: org for org in organizations_raw}
+        
+        # Filter project_organizations based on organization filters
+        filtered_project_organizations = []
+        for po in project_organizations_data:
+            org = org_map.get(po["organization_id"])
+            if not org:
+                continue
+                
+            # Apply organization filters
+            if country and org.get("country") != country:
+                continue
+            if activity_type and org.get("activity_type") != activity_type:
+                continue
+            if role and po.get("role") != role:
+                continue
+                
+            # Add organization data to the project_organization record
+            po["organization"] = org
+            filtered_project_organizations.append(po)
+        
+        project_organizations_data = filtered_project_organizations
+
+        # 2. Fetch projects data with batching
+        proj_ids = [po["project_id"] for po in project_organizations_data] if project_organizations_data else []
+        if not proj_ids:
+            return InteractiveMapResponse(
+                country_summary=[],
+                organizations=[],
+                projects=[],
+                collaboration_edges=[],
+                table_data=[],
+                available_filters={}
+            )
+
+        # Batch process projects to avoid connection issues
+        batch_size = 1000
+        projects_data = []
+        for i in range(0, len(proj_ids), batch_size):
+            batch_ids = proj_ids[i:i + batch_size]
+            proj_query = supabase.table("projects").select("*").in_("id", batch_ids)
+            if funding_scheme:
+                proj_query = proj_query.eq("funding_scheme", funding_scheme)
+            
+            batch_response = proj_query.execute()
+            if batch_response.data:
+                projects_data.extend(batch_response.data)
+
+        # Filter by start year
+        if start_year:
+            projects_data = [p for p in projects_data if p.get("start_date") and 
+                           pd.to_datetime(p["start_date"]).year == start_year]
+
+        # Filter by thematic fields
+        if field_class or field or sub_field or niche:
+            filtered_projects = []
+            for proj in projects_data:
+                include = True
+                
+                # Parse list fields
+                for field_name in ['field_class', 'field', 'sub_field', 'niche']:
+                    field_value = proj.get(field_name)
+                    if field_value and isinstance(field_value, str) and field_value.startswith('['):
+                        try:
+                            proj[field_name] = ast.literal_eval(field_value)
+                        except:
+                            proj[field_name] = []
+                    elif not isinstance(field_value, list):
+                        proj[field_name] = [field_value] if field_value else []
+
+                # Apply filters
+                if field_class and field_class not in proj.get('field_class', []):
+                    include = False
+                if field and field not in proj.get('field', []):
+                    include = False
+                if sub_field and sub_field not in proj.get('sub_field', []):
+                    include = False
+                if niche and niche not in proj.get('niche', []):
+                    include = False
+                    
+                if include:
+                    filtered_projects.append(proj)
+            projects_data = filtered_projects
+
+        # Filter organizations to only include those from filtered projects
+        project_ids = [p["id"] for p in projects_data]
+        project_organizations_data = [po for po in project_organizations_data if po["project_id"] in project_ids]
+
+        # 3. Process organization data with coordinates
+        processed_orgs = []
+        for po in project_organizations_data:
+            org = po["organization"]
+            
+            # Parse geolocation
+            lat, lon = None, None
+            if org.get("geolocation"):
+                try:
+                    coords = org["geolocation"].split(",")
+                    if len(coords) == 2:
+                        lat = float(coords[0])
+                        lon = float(coords[1])
+                except:
+                    pass
+
+            iso3 = iso2_to_iso3(org.get("country"))
+            processed_orgs.append(MapOrganizationData(
+                id=org["id"],
+                name=org.get("name") or "Unknown Organization",
+                country=org.get("country"),
+                iso_alpha_3=iso3,
+                latitude=lat,
+                longitude=lon,
+                activity_type=org.get("activity_type"),
+                role=po.get("role"),
+                ec_contribution=po.get("ec_contribution")
+            ))
+
+        # 4. Process project data
+        processed_projects = []
+        for proj in projects_data:
+            start_year_val = None
+            if proj.get("start_date"):
+                try:
+                    start_year_val = pd.to_datetime(proj["start_date"]).year
+                except:
+                    pass
+
+            processed_projects.append(MapProjectData(
+                id=proj["id"],
+                acronym=proj.get("acronym"),
+                title=proj.get("title"),
+                ec_max_contribution=proj.get("ec_max_contribution"),
+                start_year=start_year_val,
+                funding_scheme=proj.get("funding_scheme"),
+                field_class=str(proj.get("field_class", [])),
+                field=str(proj.get("field", [])),
+                sub_field=str(proj.get("sub_field", [])),
+                niche=str(proj.get("niche", [])),
+                coordinator_name=proj.get("coordinator_name")
+            ))
+
+        # 5. Calculate country summary
+        country_summary = {}
+        for po in project_organizations_data:
+            org = po["organization"]
+            country_code = org.get("country", "")
+            if not country_code:
+                continue
+                
+            # Find corresponding project
+            proj = next((p for p in projects_data if p["id"] == po["project_id"]), None)
+            contribution = proj.get("ec_max_contribution", 0) if proj else 0
+            
+            if country_code not in country_summary:
+                iso3 = iso2_to_iso3(country_code)
+                lat, lon = country_centroids_iso3.get(iso3, (None, None))
+                country_summary[country_code] = {
+                    "country": country_code,
+                    "iso_alpha_3": iso3,
+                    "latitude": lat,
+                    "longitude": lon,
+                    "total_contribution": 0,
+                    "project_count": 0,
+                    "project_ids": set()
+                }
+            
+            country_summary[country_code]["total_contribution"] += contribution or 0
+            country_summary[country_code]["project_ids"].add(po["project_id"])
+        
+        # Finalize country summary
+        processed_country_summary = []
+        for country_data in country_summary.values():
+            country_data["project_count"] = len(country_data["project_ids"])
+            country_data["log_contribution"] = np.log10(country_data["total_contribution"] + 1)
+            
+            # Calculate per capita
+            population = country_populations.get(country_data["iso_alpha_3"], 0)
+            if population > 0:
+                euros_per_100k = (country_data["total_contribution"] / population) * 100000
+                country_data["euros_per_100k_inhabitants"] = euros_per_100k
+                country_data["log_contribution_per_100k"] = np.log10(euros_per_100k + 1)
+            else:
+                country_data["euros_per_100k_inhabitants"] = None
+                country_data["log_contribution_per_100k"] = None
+            
+            del country_data["project_ids"]  # Remove the set before creating the model
+            processed_country_summary.append(CountrySummaryData(**country_data))
+
+        # 6. Generate collaboration edges
+        collaboration_edges = []
+        org_by_project = {}
+        for po in project_organizations_data:
+            proj_id = po["project_id"]
+            if proj_id not in org_by_project:
+                org_by_project[proj_id] = []
+            org_by_project[proj_id].append(po)
+
+        for proj_id, pos in org_by_project.items():
+            if len(pos) < 2:
+                continue
+                
+            proj = next((p for p in projects_data if p["id"] == proj_id), None)
+            
+            # Create edges between all pairs of organizations in the project
+            for i in range(len(pos)):
+                for j in range(i + 1, len(pos)):
+                    po1, po2 = pos[i], pos[j]
+                    org1, org2 = po1["organization"], po2["organization"]
+                    
+                    # Get coordinates
+                    org1_lat = org1_lon = org2_lat = org2_lon = None
+                    if org1.get("geolocation"):
+                        try:
+                            coords = org1["geolocation"].split(",")
+                            org1_lat, org1_lon = float(coords[0]), float(coords[1])
+                        except:
+                            pass
+                    if org2.get("geolocation"):
+                        try:
+                            coords = org2["geolocation"].split(",")
+                            org2_lat, org2_lon = float(coords[0]), float(coords[1])
+                        except:
+                            pass
+
+                    collaboration_edges.append(CollaborationEdge(
+                        org1_name=org1.get("name", ""),
+                        org2_name=org2.get("name", ""),
+                        org1_lat=org1_lat,
+                        org1_lon=org1_lon,
+                        org2_lat=org2_lat,
+                        org2_lon=org2_lon,
+                        project_id=proj_id,
+                        project_acronym=proj.get("acronym") if proj else None,
+                        project_title=proj.get("title") if proj else None,
+                        coordinator_name=proj.get("coordinator_name") if proj else None
+                    ))
+
+        # 7. Prepare table data
+        table_data = []
+        for proj in processed_projects:
+            # Get institutes for this project
+            project_orgs = [po["organization"] for po in project_organizations_data if po["project_id"] == proj.id]
+            institutes = ", ".join(sorted(set(org.get("name", "") for org in project_orgs)))
+            
+            table_data.append({
+                "project_acronym": proj.acronym or "",
+                "ec_max_contribution": proj.ec_max_contribution or 0,
+                "title": proj.title or "",
+                "institutes": institutes
+            })
+
+        # 8. Prepare available filters
+        all_orgs = [po["organization"] for po in project_organizations_data]
+        start_years = []
+        for proj in projects_data:
+            if proj.get("start_date"):
+                try:
+                    year = pd.to_datetime(proj["start_date"]).year
+                    start_years.append(str(year))  # Convert to string
+                except:
+                    pass
+        
+        available_filters = {
+            "countries": sorted(list(set(org.get("country") for org in all_orgs if org.get("country")))),
+            "funding_schemes": sorted(list(set(proj.get("funding_scheme") for proj in projects_data if proj.get("funding_scheme")))),
+            "start_years": sorted(list(set(start_years))),
+            "activity_types": sorted(list(set(org.get("activity_type") for org in all_orgs if org.get("activity_type")))),
+            "roles": sorted(list(set(po.get("role") for po in project_organizations_data if po.get("role"))))
+        }
+
+        return InteractiveMapResponse(
+            country_summary=processed_country_summary,
+            organizations=processed_orgs,
+            projects=processed_projects,
+            collaboration_edges=collaboration_edges,
+            table_data=table_data,
+            available_filters=available_filters
+        )
+
+    except Exception as e:
+        print(f"Error generating interactive map data: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating interactive map data: {str(e)}")

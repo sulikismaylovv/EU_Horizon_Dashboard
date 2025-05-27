@@ -215,6 +215,13 @@
   max-width: 100%;
 }
 
+.chart-card.interactive-map {
+  grid-column: 1 / -1;
+  max-width: 100%;
+  min-height: 500px;
+  padding: 1.5rem;
+}
+
 .chart-card.half-width {
   grid-column: span 1;
   max-width: 100%;

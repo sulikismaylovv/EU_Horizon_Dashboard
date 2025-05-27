@@ -18,10 +18,11 @@ import ProjectSeasonality from './components/ProjectSeasonality';
 import ResearchFieldNetwork from './components/ResearchFieldNetwork';
 import CollaborationNetwork from './components/CollaborationNetwork';
 import ResearchOutputTimeline from './components/ResearchOutputTimeline';
+import InteractiveMap from './components/InteractiveMap';
 
 
   const Dashboard = () => {
-    const [category, setCategory] = useState<'research'|'program'|'monitoring'>('research');
+    const [category, setCategory] = useState<'research'|'program'|'monitoring'|'map'>('research');
     const [filtersVisible, setFiltersVisible] = useState(false);
     const [expandedChart, setExpandedChart] = useState<string | null>(null);
 
@@ -73,7 +74,8 @@ import ResearchOutputTimeline from './components/ResearchOutputTimeline';
         'project-seasonality': 'Project Seasonality',
         'topic-evolution': 'Topic Evolution',
         'participation-trends': 'Participation Trends',
-        'project-timeline': 'Project Timeline'
+        'project-timeline': 'Project Timeline',
+        'interactive-map': 'EU Horizon Projects Interactive Map'
       };
       return chartTitles[chartId] || 'Chart';
     };
@@ -108,6 +110,8 @@ import ResearchOutputTimeline from './components/ResearchOutputTimeline';
           return <ParticipationTrends />;
         case 'project-timeline':
           return <ProjectTimeline />;
+        case 'interactive-map':
+          return <InteractiveMap />;
         default:
           return null;
       }
@@ -207,6 +211,26 @@ import ResearchOutputTimeline from './components/ResearchOutputTimeline';
             </>
           );
 
+        case 'map':
+          return (
+            <>
+              <div className="charts-container">
+                <div className="chart-card interactive-map">
+                  <div className="chart-header">
+                    <h3 className="chart-title">EU Horizon Projects Interactive Map</h3>
+                    <div className="chart-menu">
+                      <button title="Expand" onClick={() => handleExpandChart('interactive-map')}>⛶</button>
+                      <button title="Download">⬇</button>
+                    </div>
+                  </div>
+                  <div className="chart-content">
+                    <InteractiveMap />
+                  </div>
+                </div>
+              </div>
+            </>
+          );
+
         default:
           return null;
       }
@@ -243,6 +267,12 @@ import ResearchOutputTimeline from './components/ResearchOutputTimeline';
                 onClick={() => setCategory('monitoring')}
               >
                 Performance Monitoring
+              </button>
+              <button 
+                className={`nav-button ${category === 'map' ? 'active' : ''}`}
+                onClick={() => setCategory('map')}
+              >
+                Interactive Map
               </button>
             </nav>
 
