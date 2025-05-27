@@ -28,6 +28,7 @@ base_dir = os.path.dirname(notebook_dir)
 
 df_proj = robust_csv_reader(f'{base_dir}/data/processed/project_df.csv', delimiter=',')
 df_org = robust_csv_reader(f'{base_dir}/data/processed/organization_df.csv', delimiter=',')
+collab_df = pd.read_csv(f'{base_dir}/data/processed/project_collaborations.csv')
 
 # change keys
 columns_renamed = {
@@ -370,6 +371,21 @@ def plot_collaboration_network(filtered_org, filtered_projects):
 # add ISO 3 country codes
 df_org['iso_alpha_3'] = df_org['country'].apply(iso2_to_iso3)
 
+def to_list_of_strings(val):
+    if isinstance(val, list):
+        # Convert all elements to string
+        return [str(x).strip() for x in val if pd.notnull(x)]
+    if isinstance(val, str):
+        # Remove brackets if present and split by comma
+        val = val.strip()
+        if val.startswith('[') and val.endswith(']'):
+            val = val[1:-1]
+        # Split by comma and strip whitespace
+        return [v.strip() for v in val.split(',') if v.strip()]
+    if pd.isnull(val):
+        return []
+    return [str(val).strip()]
+
 app = dash.Dash(__name__)
 
 app.layout = html.Div([
@@ -543,21 +559,6 @@ def filter_by_list_column(df, col, selected):
      Input('org-pins-toggle', 'value')]
 )
 
-def to_list_of_strings(val):
-    if isinstance(val, list):
-        # Convert all elements to string
-        return [str(x).strip() for x in val if pd.notnull(x)]
-    if isinstance(val, str):
-        # Remove brackets if present and split by comma
-        val = val.strip()
-        if val.startswith('[') and val.endswith(']'):
-            val = val[1:-1]
-        # Split by comma and strip whitespace
-        return [v.strip() for v in val.split(',') if v.strip()]
-    if pd.isnull(val):
-        return []
-    return [str(val).strip()]
-
 def update_map(selected_country, 
                per_capita_toggle, 
                selected_funding_scheme, 
@@ -578,17 +579,17 @@ def update_map(selected_country,
     else:
         filtered_proj = df_proj
         filtered_org = df_org
- 
+   
 
     # filter by thematic fields
     for col in ['field_class', 'field', 'sub_field', 'niche']:
         filtered_proj[col] = filtered_proj[col].apply(to_list_of_strings)
+
     filtered_proj = filter_by_list_column(filtered_proj, 'field_class', selected_field_class)
     filtered_proj = filter_by_list_column(filtered_proj, 'field', selected_field)
     filtered_proj = filter_by_list_column(filtered_proj, 'sub_field', selected_subfield)
     filtered_proj = filter_by_list_column(filtered_proj, 'niche', selected_niche)
     filtered_org = filtered_org[filtered_org['id'].isin(filtered_proj['id'])]
-
 
 
     # Filter by activity type
@@ -631,7 +632,7 @@ def update_map(selected_country,
             if country_populations.get(iso3, 0) > 0 else 0
         )
     country_summary['log_contribution_per_100k'] = np.log10(country_summary['€/100k_inhabitants'] + 1)
-
+    
     if selected_country == 'all':
         color_col = 'log_contribution_per_100k' if 'per_capita' in per_capita_toggle else 'log_contribution'
         fig = px.scatter_map(
@@ -658,10 +659,73 @@ def update_map(selected_country,
                     lat=orgs_with_coords['latitude'],
                     text=orgs_with_coords['name'],
                     mode='markers',
-                    marker=dict(size=6, color='red', symbol='circle'),
+                    marker=dict(size=6, color='green', symbol='circle', opacity=0.4),
                     name='Organizations'
                 )
             )
+        # if 'show_network' in network_toggle:
+        #         # get selected project IDs from filtered_proj
+        #         selected_project_ids = filtered_proj['id'].unique()
+        #         filtered_collab = collab_df[collab_df['project_id'].isin(selected_project_ids)]
+
+        #         # Draw a line between every pair of organizations in the project
+        #         for _, row in filtered_collab.iterrows():
+        #             project_row = filtered_proj[filtered_proj['id'] == row['project_id']].iloc[0]
+        #             acronym = project_row.get('acronym', '')
+        #             n_pubs = project_row.get('number_of_publications', '')
+        #             euroSciVocTitle = project_row.get('euroSciVocTitle', '')
+        #             hovertext = (
+        #                 f"<b>Acronym:</b> {acronym}<br>"
+        #                 f"<b>Publications:</b> {n_pubs}<br>"
+        #                 f"<b>euroSciVocTitle:</b> {euroSciVocTitle}"
+        #             )
+        #             fig.add_trace(
+        #                 go.Scattermap(
+        #                     lat=[row['org1_lat'], row['org2_lat']],
+        #                     lon=[row['org1_lon'], row['org2_lon']],
+        #                     mode='lines',
+        #                     line=dict(width=1.5, color='blue'),
+        #                     opacity=0.4,
+        #                     hoverinfo='text',
+        #                     text=hovertext,
+        #                     hovertemplate='%{text}<extra></extra>',
+        #                     showlegend=False
+        #                 )
+        #             )
+        if 'show_network' in network_toggle:
+            # Only plot collaborations for organizations with coordinates
+            orgs_with_coords = filtered_org.dropna(subset=['latitude', 'longitude'])
+
+            # Group by project
+            for pid, group in orgs_with_coords.groupby('id'):
+                coords = group[['latitude', 'longitude']].values
+                # Draw a line between every pair of organizations in the project
+                project_row = filtered_proj[filtered_proj['id'] == pid].iloc[0]
+                acronym = project_row.get('acronym', '')
+                coordinator = project_row.get('coordinator_name', '')
+                title = project_row.get('title', '')
+                hovertext = (
+                        f"<b>Acronym:</b> {acronym}<br>"
+                        f"<b>Coordinator:</b> {coordinator}<br>"
+                        f"<b>Title:</b> {title}"
+                )
+                for i in range(len(coords)):
+                    for j in range(i + 1, len(coords)):
+                        lat_pair = [coords[i][0], coords[j][0]]
+                        lon_pair = [coords[i][1], coords[j][1]]
+                        fig.add_trace(
+                            go.Scattermap(
+                                lat=lat_pair,
+                                lon=lon_pair,
+                                mode='lines',
+                                line=dict(width=2, color='blue'),
+                                opacity=0.4,
+                                hoverinfo='text',
+                                text=hovertext,
+                                hovertemplate='%{text}<extra></extra>',
+                                showlegend=False
+                            )
+                        )
     else:
         orgs_in_country = filtered_org[filtered_org['iso_alpha_3'] == selected_country].copy()
         orgs_in_country = orgs_in_country.merge(df_proj, on='id')
@@ -701,10 +765,33 @@ def update_map(selected_country,
                     lat=orgs_with_coords['latitude'],
                     text=orgs_with_coords['name'],
                     mode='markers',
-                    marker=dict(size=6, color='red', symbol='circle'),
+                    marker=dict(size=6, color='green', symbol='circle', opacity=0.4),
                     name='Organizations'
                 )
             )
+        
+        if 'show_network' in network_toggle:
+            # Only plot collaborations for organizations with coordinates
+            orgs_with_coords = filtered_org.dropna(subset=['latitude', 'longitude'])
+            # Group by project
+            for pid, group in orgs_with_coords.groupby('id'):
+                coords = group[['latitude', 'longitude']].values
+                # Draw a line between every pair of organizations in the project
+                for i in range(len(coords)):
+                    for j in range(i + 1, len(coords)):
+                        lat_pair = [coords[i][0], coords[j][0]]
+                        lon_pair = [coords[i][1], coords[j][1]]
+                        fig.add_trace(
+                            go.Scattermap(
+                                lat=lat_pair,
+                                lon=lon_pair,
+                                mode='lines',
+                                line=dict(width=2, color='blue'),
+                                opacity=0.4,
+                                hoverinfo='none',
+                                showlegend=False
+                            )
+                        )
     
     # Prepare project table data
     if selected_country == 'all':
