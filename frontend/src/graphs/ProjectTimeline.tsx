@@ -25,9 +25,11 @@ const ProjectTimeline: React.FC = () => {
   const fetchData = async (selectedMetric: string) => {
     try {
       setLoading(true)
-      const res = await axios.get<ProjectTimelineResponse>(
-        `http://54.93.51.85:8000/analytics/project-timeline?metric=${selectedMetric}`
-      )
+      const endpoint =
+        process.env.NODE_ENV === 'development'
+          ? `/analytics/project-timeline?metric=${selectedMetric}` // CRA will proxy this to http://
+          : `/api/analytics/project-timeline?metric=${selectedMetric}` // Vercel will rewrite this to your catch-all
+      const res = await axios.get<ProjectTimelineResponse>(endpoint)
       setPlotData(res.data)
     } catch (err) {
       console.error(err)

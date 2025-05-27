@@ -17,9 +17,13 @@ const ProjectsByCountryBarChart: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
+        const endpoint =
+          process.env.NODE_ENV === 'development'
+            ? '/analytics/projects-by-country' // CRA will proxy this to http://
+            : '/api/analytics/projects-by-country' // Vercel will rewrite this to your catch-all
         // Expecting an array from the API
-        const res = await axios.get<CountryProjectData[]>('http://54.93.51.85:8000/analytics/projects-by-country') // Updated API endpoint
-        
+        const res = await axios.get<CountryProjectData[]>(endpoint)
+
         // Remove the first element from the response data
         if (res.data && res.data.length > 0) {
           setPlotData(res.data.slice(1)) // Slice the array starting from the second element

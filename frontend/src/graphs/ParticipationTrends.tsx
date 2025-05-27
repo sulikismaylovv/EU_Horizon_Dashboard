@@ -32,7 +32,11 @@ const ParticipationTrends: React.FC = () => {
   const fetchAvailableCountries = async () => {
     try {
       setCountriesLoading(true)
-      const res = await axios.get<CountryOption[]>('http://54.93.51.85:8000/analytics/available-countries')
+      const endpoint =
+        process.env.NODE_ENV === 'development'
+          ? '/analytics/available-countries' // CRA will proxy this to http://
+          : '/api/analytics/available-countries' // Vercel will rewrite this to your catch-all
+      const res = await axios.get<CountryOption[]>(endpoint)
       setAvailableCountries(res.data)
     } catch (err) {
       console.error('Failed to fetch available countries:', err)
@@ -44,9 +48,11 @@ const ParticipationTrends: React.FC = () => {
   const fetchData = async (selectedCountry: string) => {
     try {
       setLoading(true)
-      const res = await axios.get<ProjectTimelineResponse>(
-        `http://54.93.51.85:8000/analytics/participation-trends?country=${encodeURIComponent(selectedCountry)}`
-      )
+      const endpoint =
+        process.env.NODE_ENV === 'development'
+          ? `/analytics/participation-trends?country=${encodeURIComponent(selectedCountry)}` // CRA will proxy this to http://
+          : `/api/analytics/participation-trends?country=${encodeURIComponent(selectedCountry)}` // Vercel will rewrite this to your catch-all
+      const res = await axios.get<ProjectTimelineResponse>(endpoint)
       setPlotData(res.data)
     } catch (err) {
       console.error(err)

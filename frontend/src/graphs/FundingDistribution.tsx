@@ -25,9 +25,11 @@ const FundingDistribution: React.FC = () => {
   const fetchData = async (bins: number) => {
     try {
       setLoading(true)
-      const res = await axios.get<DistributionResponse>(
-        `http://54.93.51.85:8000/analytics/funding-distribution?bin_count=${bins}`
-      )
+      const endpoint =
+        process.env.NODE_ENV === 'development'
+          ? `/analytics/funding-distribution?bin_count=${bins}` // CRA will proxy this to http://
+          : `/api/analytics/funding-distribution?bin_count=${bins}` // Vercel will rewrite this to your catch-all
+      const res = await axios.get<DistributionResponse>(endpoint)
       setPlotData(res.data)
     } catch (err) {
       console.error(err)

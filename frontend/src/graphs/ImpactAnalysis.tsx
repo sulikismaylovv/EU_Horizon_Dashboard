@@ -61,7 +61,11 @@ const ImpactAnalysis: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const res = await axios.get<ProjectImpactData[]>('http://127.0.0.1:8000/projects_impact_analysis')
+        const endpoint =
+          process.env.NODE_ENV === 'development'  // CRA will proxy this to http://
+            ? '/projects_impact_analysis'        // Local development
+            : '/api/projects_impact_analysis'    // Production (Vercel catch-all)
+        const res = await axios.get<ProjectImpactData[]>(endpoint)
         setData(res.data)
       } catch (err) {
         setError('Failed to load impact analysis data')

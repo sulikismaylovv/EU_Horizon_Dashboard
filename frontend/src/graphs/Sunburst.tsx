@@ -11,7 +11,12 @@ const SunburstDataViewer: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const res = await axios.get<SunburstAPIData>('http://54.93.51.85:8000/projects/analytics/sunburst')
+        setLoading(true)
+        const endpoint =
+          process.env.NODE_ENV === 'development'
+            ? '/projects/analytics/sunburst' // CRA will proxy this to http://
+            : '/api/projects/analytics/sunburst' // Vercel will rewrite this to your catch-all
+        const res = await axios.get<SunburstAPIData>(endpoint)
         setData(res.data)
       } catch (err) {
         console.error(err)

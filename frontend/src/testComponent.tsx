@@ -11,7 +11,11 @@ const MyComponent: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('http://54.93.51.85:8000/projects/analytics/sunburst');
+        const endpoint =
+          process.env.NODE_ENV === 'development'
+            ? '/projects/analytics/sunburst' // CRA will proxy this to http://
+            : '/api/projects/analytics/sunburst'; // Vercel will rewrite this to your catch-all
+        const response = await fetch(endpoint);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }

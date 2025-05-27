@@ -15,7 +15,12 @@ const TopInstitutionsBarChart: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const res = await axios.get<InstitutionData[]>('http://54.93.51.85:8000/analytics/top-institutions-by-funding')
+        const endpoint =  
+          process.env.NODE_ENV === 'development'
+            ? '/analytics/top-institutions-by-funding' // CRA will proxy this to http://
+            : '/api/analytics/top-institutions-by-funding' // Vercel will rewrite this to your catch-all
+        // Fetch data from the API
+        const res = await axios.get<InstitutionData[]>(endpoint)
         // Remove the first element from the response data
         if (res.data && res.data.length > 0) {
           setPlotData(res.data.slice(1)) // Slice the array starting from the second element

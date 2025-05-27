@@ -24,7 +24,11 @@ const ProgramDurationHeatmap: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const res = await axios.get<HeatmapResponse>('http://54.93.51.85:8000/analytics/program-duration-heatmap')
+        const endpoint =
+          process.env.NODE_ENV === 'development'
+            ? '/analytics/program-duration-heatmap' // CRA will proxy this to http://
+            : '/api/analytics/program-duration-heatmap' // Vercel will rewrite this to your catch-all
+        const res = await axios.get<HeatmapResponse>(endpoint)
         setPlotData(res.data)
       } catch (err) {
         console.error(err)

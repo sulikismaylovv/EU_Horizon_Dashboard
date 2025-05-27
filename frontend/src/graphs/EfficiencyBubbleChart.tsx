@@ -26,7 +26,11 @@ const EfficiencyBubbleChart: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const res = await axios.get<BubbleChartResponse>('http://54.93.51.85:8000/analytics/efficiency-bubble-chart')
+        const endpoint =
+          process.env.NODE_ENV === 'development'
+            ? '/analytics/efficiency-bubble-chart' // CRA will proxy this to http://
+            : '/api/analytics/efficiency-bubble-chart' // Vercel will rewrite this to your catch-all
+        const res = await axios.get<BubbleChartResponse>(endpoint)
         setPlotData(res.data)
       } catch (err) {
         console.error(err)
