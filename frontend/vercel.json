@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/analytics/(.*)",
+      "destination": "http://54.93.51.85:8000/analytics/$1"
+    },
+    {
+      "source": "/api/projects/(.*)",
+      "destination": "http://54.93.51.85:8000/projects/$1"
+    }
+  ]
+}
