@@ -219,7 +219,19 @@ import InteractiveMap from './components/InteractiveMap';
                     </div>
                   </div>
                   <div className="chart-content">
-                    <InteractiveMap />
+                    <div className="map-placeholder">
+                      <div className="map-placeholder-content">
+                        <div className="map-placeholder-icon">🗺️</div>
+                        <h4>Interactive Map View</h4>
+                        <p>Click the expand button (⛶) above to load the interactive map showing EU Horizon projects across Europe.</p>
+                        <button 
+                          className="map-placeholder-button"
+                          onClick={() => handleExpandChart('interactive-map')}
+                        >
+                          Open Interactive Map
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

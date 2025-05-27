@@ -309,6 +309,65 @@
   max-width: 100% !important;
 }
 
+/* Map Placeholder Styles */
+.map-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  border: 2px dashed #cbd5e0;
+  border-radius: 12px;
+  text-align: center;
+  padding: 2rem;
+}
+
+.map-placeholder-content {
+  max-width: 400px;
+}
+
+.map-placeholder-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+  opacity: 0.6;
+}
+
+.map-placeholder h4 {
+  font-size: 1.5rem;
+  color: #2d3748;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+.map-placeholder p {
+  color: #718096;
+  margin-bottom: 1.5rem;
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+
+.map-placeholder-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.map-placeholder-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.map-placeholder-button:active {
+  transform: translateY(0);
+}
+
 .filter-section {
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
