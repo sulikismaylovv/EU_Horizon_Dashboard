@@ -124,3 +124,4 @@ Werkzeug==3.0.6
 wheel==0.45.1
 widgetsnbextension==4.0.14
 zipp==3.21.0
+pycountry==23.12.11

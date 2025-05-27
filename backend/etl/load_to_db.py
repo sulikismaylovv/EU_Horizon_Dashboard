@@ -114,25 +114,6 @@ def safe_load_csv(name, **kwargs) -> pd.DataFrame:
     )
     return df
 
-def parse_languages(val):
-    # val might be None, a JSON-array string, or a comma-separated list
-    if pd.isna(val) or val in (None, ""):
-        return []
-    if isinstance(val, list):
-        return val
-    if isinstance(val, str):
-        # try JSON first
-        try:
-            arr = json.loads(val)
-            if isinstance(arr, list):
-                return arr
-        except Exception:
-            pass
-        # fallback to splitting on commas
-        return [lang.strip() for lang in val.split(",") if lang.strip()]
-    return []
-
-
 
 def safe_json_load(val):
     if pd.isna(val):
@@ -238,27 +219,14 @@ def load_relationships():
     df = safe_load_csv("project_organizations.csv")
     df = fix_blanks(df)
     df = df.drop_duplicates(subset=["project_id", "organization_id"])
-    # I have numbers in ec_contribution, net_ec_contribution, total_cost
-    for col in ("ec_contribution","net_ec_contribution","total_cost"):
-        if col in df:
-            # turn "272174,38" → "272174.38", remove stray spaces, then parse
-            df[col] = (
-                df[col]
-                .astype(str)
-                .str.replace(",", ".", regex=False)
-                .str.strip()
-            )
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
-        else:
-            # if missing entirely, add as 0.0
-            df[col] = 0.0
+    df["end_of_participation"] = df["end_of_participation"].apply(clean_date)
     batch_upsert(
         "project_organizations",
         df[[
-            "project_id", "organization_id", "role", "order_index", "ec_contribution", "net_ec_contribution", "total_cost", "end_of_participation"
+            "project_id", "organization_id", "role", "order_index", "end_of_participation"
         ]].where(pd.notnull(df), None).to_dict(orient="records"),
-        date_fields=set()  # No date fields in this table
-    )
+        date_fields={"end_of_participation"}
+    )   
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Stage 3: Auxiliaries
@@ -285,11 +253,11 @@ def load_aux():
         "description","url","collection","content_update_date"
     ]
     logging.info("Upserting %d deliverables", len(df))
-    batch_upsert(
-        "deliverables",
-        df[cols].where(pd.notnull(df), None).to_dict("records"),
-        date_fields={"content_update_date"}
-    )
+    #batch_upsert(
+    #    "deliverables",
+    #    df[cols].where(pd.notnull(df), None).to_dict("records"),
+    #    date_fields={"content_update_date"}
+    #)
 
     # Publications
     df = safe_load_csv("publications.csv"); df = fix_blanks(df)
@@ -300,7 +268,7 @@ def load_aux():
     df = df.loc[~bad]
     cols = ["id","project_id","title","is_published_as","authors","journal_title","journal_number","published_year","published_pages","issn","isbn","doi","collection","content_update_date"]
     logging.info("Upserting %d publications", len(df))
-    batch_upsert("publications", df[cols].where(pd.notnull(df), None).to_dict("records"), date_fields={"content_update_date"})
+    #batch_upsert("publications", df[cols].where(pd.notnull(df), None).to_dict("records"), date_fields={"content_update_date"})
 
     # Web items
     load_web_items()
@@ -322,9 +290,8 @@ def load_web_links():
     df = safe_load_csv("web_links.csv")
     df = fix_blanks(df)
 
-    # normalize JSON arrays. You get available_languages as strings: this: en or de,en,es,fr,it,pl
-    
-    df["available_languages"] = df["available_languages"].apply(parse_languages)
+    # normalize JSON arrays
+    df["available_languages"] = df["available_languages"].apply(safe_json_load)
 
     # rename to match DDL if needed
     df = df.rename(columns={
@@ -372,7 +339,7 @@ def load_web_items():
     print("Loading web_items.csv")
     df = safe_load_csv("web_items.csv")
     df = fix_blanks(df)
-    df["available_languages"] = df["available_languages"].apply(parse_languages)
+    df["available_languages"] = df["available_languages"].apply(safe_json_load)
 
     # coerce project_id → float, then int or fallback
     df["project_id"] = pd.to_numeric(df["project_id"], errors="coerce")
@@ -416,10 +383,10 @@ def load_web_items():
 # ──────────────────────────────────────────────────────────────────────────────
 def main():
     logging.info("=== Stage 1: Core tables ===")
-    #load_core()
+    load_core()
     
     logging.info("=== Stage 2: Relationship tables ===")
-    #load_relationships()
+    load_relationships()
 
     logging.info("=== Stage 3: Auxiliary tables ===")
     load_aux()

@@ -203,8 +203,6 @@ class Project_data(CORDIS_data):
             "publication_types": pub_types,
             "deliverable_types": deliverable_types
         }
-        
-        
     def summary(self):
         return {
             "project_id": self.id,
