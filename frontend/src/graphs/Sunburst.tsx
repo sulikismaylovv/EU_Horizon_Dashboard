@@ -27,8 +27,7 @@ const SunburstDataViewer: React.FC = () => {
   if (!data)   return <p>No data</p>
 
   return (
-    <div>
-      <h2>Sunburst: {data.metric_name}</h2>
+    <div style={{ width: '100%', height: '100%' }}>
       <Plot
         data={[
           {
@@ -40,8 +39,14 @@ const SunburstDataViewer: React.FC = () => {
             maxdepth: data.max_level_processed
           }
         ]}
-        layout={{ margin: { t: 0, l: 0, r: 0, b: 0 } }}
-        style={{ width: '100%', height: '600px' }}
+        layout={{ 
+          margin: { t: 20, l: 20, r: 20, b: 20 },
+          font: { size: 11 },
+          showlegend: false
+        }}
+        style={{ width: '100%', height: '100%' }}
+        config={{ responsive: true, displayModeBar: false }}
+        useResizeHandler={true}
       />
     </div>
   )

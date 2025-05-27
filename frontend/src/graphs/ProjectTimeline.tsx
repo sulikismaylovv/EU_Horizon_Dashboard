@@ -80,12 +80,17 @@ const ProjectTimeline: React.FC = () => {
             automargin: true,
           },
           yaxis: {
-            title: { text: plotData.y_axis_label },
+            title: { text: plotData.y_axis_label, font: {size: 12} },
             automargin: true,
+            tickfont: {size: 10}
           },
+          margin: { l: 60, r: 20, b: 60, t: 40, pad: 4 },
+          showlegend: false,
+          font: { size: 11 }
         }}
-        style={{ width: '100%', height: '500px' }}
-        config={{ responsive: true }}
+        style={{ width: '100%', height: '100%' }}
+        config={{ responsive: true, displayModeBar: false }}
+        useResizeHandler={true}
       />
     </div>
   )

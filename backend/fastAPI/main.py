@@ -26,7 +26,9 @@ app = FastAPI(
     version="1.0.0"
 )
 origins = [
+    "http://localhost:3001",
     "http://localhost:3000",  # Local development
+        # Local development
 ]
 app.add_middleware(
     CORSMiddleware,
@@ -1483,3 +1485,28 @@ async def get_project_seasonality():
     except Exception as e:
         print(f"Error generating project seasonality: {e}")
         raise HTTPException(status_code=500, detail=f"Error generating project seasonality: {str(e)}")
+
+@app.get("/analytics/available-countries", tags=["Analytics"])
+async def get_available_countries():
+    """
+    Returns a list of all available country codes that have organization data.
+    """
+    try:
+        response = supabase.table("organizations").select("country").execute()
+        if not response.data:
+            return []
+        
+        df = pd.DataFrame(response.data)
+        countries = df['country'].value_counts()
+        
+        # Return countries with their counts, sorted by count descending
+        result = [
+            {"code": country, "count": int(count)} 
+            for country, count in countries.items() 
+            if country and country != "Unknown"
+        ]
+        
+        return sorted(result, key=lambda x: x["count"], reverse=True)
+    except Exception as e:
+        print(f"Error fetching available countries: {e}")
+        raise HTTPException(status_code=500, detail=f"Error fetching available countries: {str(e)}")
