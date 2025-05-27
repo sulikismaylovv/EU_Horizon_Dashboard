@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import './dashboard.css';
 import reportWebVitals from './reportWebVitals';
-import Sunburst from './graphs/sunburst';
+import Sunburst from './graphs/Sunburst';
 import TopInstitutionsBarChart from './graphs/InstitutionsByFunding';
 import ProjectsByCountryBarChart from './graphs/ProjectsByCountry';
 import EcByCountryBarChart from './graphs/EcByCountry';
