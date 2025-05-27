@@ -18,8 +18,13 @@ const EcByCountryBarChart: React.FC = () => {
     (async () => {
       try {
         // Expecting an array from the API
-        const res = await axios.get<EcByCountryData[]>('/analytics/ec-by-country')
-       // Updated API endpoint
+        const endpoint = 
+          process.env.NODE_ENV === 'development'
+            ? '/analytics/ec-by-country'   // CRA will proxy this to http://54.93.51.85:8000
+            : '/api/analytics/ec-by-country' // Vercel will rewrite this to your catch-all
+        const res = await axios.get<EcByCountryData[]>(endpoint)
+        console.log('💥 res.data:', res.data)
+        // Updated API endpoint 
         
         // Remove the first element from the response data
         if (res.data && res.data.length > 0) {
