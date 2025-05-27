@@ -69,6 +69,10 @@ interface InteractiveMapResponse {
     start_years: string[];
     activity_types: string[];
     roles: string[];
+    field_classes: string[];
+    fields: string[];
+    sub_fields: string[];
+    niches: string[];
   };
 }
 
@@ -340,7 +344,7 @@ const InteractiveMap: React.FC = () => {
     <div className="w-full space-y-4">
       {/* Filter Controls */}
       <div className="bg-gray-50 p-4 rounded-lg">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {/* First Column */}
           <div className="space-y-3">
             <div>
@@ -396,6 +400,73 @@ const InteractiveMap: React.FC = () => {
           <div className="space-y-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
+                Field Class:
+              </label>
+              <select
+                value={filters.field_class || ''}
+                onChange={(e) => handleFilterChange('field_class', e.target.value || null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All</option>
+                {data.available_filters.field_classes.map(fieldClass => (
+                  <option key={fieldClass} value={fieldClass}>{fieldClass}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Field:
+              </label>
+              <select
+                value={filters.field || ''}
+                onChange={(e) => handleFilterChange('field', e.target.value || null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All</option>
+                {data.available_filters.fields.map(field => (
+                  <option key={field} value={field}>{field}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Sub Field:
+              </label>
+              <select
+                value={filters.sub_field || ''}
+                onChange={(e) => handleFilterChange('sub_field', e.target.value || null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All</option>
+                {data.available_filters.sub_fields.map(subField => (
+                  <option key={subField} value={subField}>{subField}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Third Column */}
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Niche:
+              </label>
+              <select
+                value={filters.niche || ''}
+                onChange={(e) => handleFilterChange('niche', e.target.value || null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All</option>
+                {data.available_filters.niches.map(niche => (
+                  <option key={niche} value={niche}>{niche}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Activity Type:
               </label>
               <select
@@ -425,16 +496,9 @@ const InteractiveMap: React.FC = () => {
                 ))}
               </select>
             </div>
-
-            <button
-              onClick={resetFilters}
-              className="w-full px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
-            >
-              Reset Filters
-            </button>
           </div>
 
-          {/* Third Column */}
+          {/* Fourth Column */}
           <div className="space-y-3">
             <div>
               <label className="flex items-center space-x-2">
@@ -477,6 +541,13 @@ const InteractiveMap: React.FC = () => {
                 </span>
               </label>
             </div>
+
+            <button
+              onClick={resetFilters}
+              className="w-full px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
+            >
+              Reset Filters
+            </button>
           </div>
         </div>
       </div>

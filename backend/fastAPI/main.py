@@ -2121,6 +2121,11 @@ async def get_interactive_map_data(
         # 8. Prepare available filters
         all_orgs = [po["organization"] for po in project_organizations_data]
         start_years = []
+        field_classes = set()
+        fields = set()
+        sub_fields = set()
+        niches = set()
+        
         for proj in projects_data:
             if proj.get("start_date"):
                 try:
@@ -2128,13 +2133,38 @@ async def get_interactive_map_data(
                     start_years.append(str(year))  # Convert to string
                 except:
                     pass
+            
+            # Extract thematic fields
+            for field_name, field_set in [
+                ("field_class", field_classes), 
+                ("field", fields), 
+                ("sub_field", sub_fields), 
+                ("niche", niches)
+            ]:
+                field_value = proj.get(field_name)
+                if field_value:
+                    if isinstance(field_value, list):
+                        field_set.update(field_value)
+                    elif isinstance(field_value, str) and field_value.startswith('['):
+                        try:
+                            parsed_list = ast.literal_eval(field_value)
+                            if isinstance(parsed_list, list):
+                                field_set.update(parsed_list)
+                        except:
+                            field_set.add(field_value)
+                    else:
+                        field_set.add(field_value)
         
         available_filters = {
             "countries": sorted(list(set(org.get("country") for org in all_orgs if org.get("country")))),
             "funding_schemes": sorted(list(set(proj.get("funding_scheme") for proj in projects_data if proj.get("funding_scheme")))),
             "start_years": sorted(list(set(start_years))),
             "activity_types": sorted(list(set(org.get("activity_type") for org in all_orgs if org.get("activity_type")))),
-            "roles": sorted(list(set(po.get("role") for po in project_organizations_data if po.get("role"))))
+            "roles": sorted(list(set(po.get("role") for po in project_organizations_data if po.get("role")))),
+            "field_classes": sorted(list(field_classes - {"other", ""})),
+            "fields": sorted(list(fields - {"other", ""})),
+            "sub_fields": sorted(list(sub_fields - {"other", ""})),
+            "niches": sorted(list(niches - {"other", ""}))
         }
 
         return InteractiveMapResponse(
