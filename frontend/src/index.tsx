@@ -12,11 +12,12 @@ import EfficiencyBubbleChart from './graphs/EfficiencyBubbleChart';
 import ProgramDurationHeatmap from './graphs/ProgramDurationHeatmap';
 import ParticipationTrends from './graphs/ParticipationTrends';
 import ProjectTimeline from './graphs/ProjectTimeline';
+import ImpactAnalysis from './graphs/ImpactAnalysis';
 
 import TopicEvolution from './components/TopicEvolution';
 import ProjectSeasonality from './components/ProjectSeasonality';
 import ResearchFieldNetwork from './components/ResearchFieldNetwork';
-import CollaborationNetwork from './components/CollaborationNetwork';
+// import CollaborationNetwork from './components/CollaborationNetwork';
 import ResearchOutputTimeline from './components/ResearchOutputTimeline';
 import InteractiveMap from './components/InteractiveMap';
 
@@ -66,7 +67,7 @@ import InteractiveMap from './components/InteractiveMap';
         'projects-by-country': 'Projects by Country',
         'ec-contribution-country': 'EC Contribution by Country',
         'research-field-network': 'Research Field Network',
-        'collaboration-network': 'Country Collaboration Network',
+        'collaboration-network': 'Impact Analysis',
         'research-output-timeline': 'Research Output Timeline',
         'funding-distribution': 'Funding Distribution',
         'efficiency-analysis': 'Efficiency Analysis',
@@ -93,7 +94,7 @@ import InteractiveMap from './components/InteractiveMap';
         case 'research-field-network':
           return <ResearchFieldNetwork />;
         case 'collaboration-network':
-          return <CollaborationNetwork />;
+          return <ImpactAnalysis />;
         case 'research-output-timeline':
           return <ResearchOutputTimeline />;
         case 'funding-distribution':
@@ -158,8 +159,8 @@ import InteractiveMap from './components/InteractiveMap';
                   <ResearchFieldNetwork />
                 </ChartCard>
 
-                <ChartCard id="collaboration-network" title="Country Collaboration Network" fullWidth>
-                  <CollaborationNetwork />
+                <ChartCard id="collaboration-network" title="Impact Analysis" fullWidth>
+                  <ImpactAnalysis />
                 </ChartCard>
 
                 <ChartCard id="research-output-timeline" title="Research Output Timeline" fullWidth>

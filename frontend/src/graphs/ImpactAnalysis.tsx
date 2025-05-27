@@ -2,23 +2,30 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import Plot from 'react-plotly.js'
 
-// Define the interface for the project data
-interface ProjectImpactData {
+// Define the interface for the impact analysis data
+interface ImpactAnalysisData {
   id: number
-  acronym: string
-  status: string
   title: string
-  total_cost: number | string | null
-  ec_max_contribution: number | null
-  duration_days: number | null
-  duration_months: number | null
-  duration_years: number | null
-  n_institutions: number | null
-  ec_contribution_per_year: number | null
-  total_cost_per_year: number | null
-  niche: string
-  n_publications: number | null
-  duration_months_remainder: number | null
+  acronym?: string | null
+  total_cost?: number | null
+  ec_max_contribution?: number | null
+  total_cost_per_year?: number | null
+  ec_contribution_per_year?: number | null
+  n_institutions?: number | null
+  n_publications?: number | null
+  duration_days?: number | null
+  duration_years?: number | null
+  duration_months_remainder?: number | null
+  niche?: string | null
+  framework_programme?: string | null
+}
+
+interface ImpactAnalysisResponse {
+  chart_title: string
+  data: ImpactAnalysisData[]
+  metrics_options: string[]
+  x_axis_label: string
+  y_axis_label: string
 }
 
 const metricsList = [
@@ -52,22 +59,25 @@ const hoverDataList = [
 ] as const
 
 const ImpactAnalysis: React.FC = () => {
-  const [data, setData] = useState<ProjectImpactData[]>([])
+  const [plotData, setPlotData] = useState<ImpactAnalysisResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [xMetric, setXMetric] = useState<typeof metricsList[number]>('total_cost')
   const [yMetric, setYMetric] = useState<typeof metricsList[number]>('ec_max_contribution')
+  const [xAxisType, setXAxisType] = useState<'linear' | 'log'>('linear')
+  const [yAxisType, setYAxisType] = useState<'linear' | 'log'>('linear')
 
   useEffect(() => {
     (async () => {
       try {
         const endpoint =
-          process.env.NODE_ENV === 'development'  // CRA will proxy this to http://
-            ? '/projects_impact_analysis'        // Local development
-            : '/api/projects_impact_analysis'    // Production (Vercel catch-all)
-        const res = await axios.get<ProjectImpactData[]>(endpoint)
-        setData(res.data)
+          process.env.NODE_ENV === 'development'
+            ? '/analytics/impact-analysis' // CRA will proxy this to http://
+            : '/api/analytics/impact-analysis' // Vercel will rewrite this to your catch-all
+        const res = await axios.get<ImpactAnalysisResponse>(endpoint)
+        setPlotData(res.data)
       } catch (err) {
+        console.error(err)
         setError('Failed to load impact analysis data')
       } finally {
         setLoading(false)
@@ -77,11 +87,13 @@ const ImpactAnalysis: React.FC = () => {
 
   if (loading) return <p>Loading…</p>
   if (error) return <p style={{ color: 'red' }}>{error}</p>
-  if (!data || data.length === 0) return <p>No impact analysis data available.</p>
+  if (!plotData || !plotData.data || plotData.data.length === 0) return <p>No impact analysis data available.</p>
+
+  const data = plotData.data
 
   // Prepare data for Plotly
   const getMetricArray = (metric: string) =>
-    data.map(d => {
+    data.map((d: ImpactAnalysisData) => {
       const val = (d as any)[metric]
       if (typeof val === 'string') {
         // Try to parse as float, fallback to null if not possible
@@ -91,7 +103,7 @@ const ImpactAnalysis: React.FC = () => {
       return val !== undefined ? val : null
     })
 
-  const customData = data.map(d =>
+  const customData = data.map((d: ImpactAnalysisData) =>
     hoverDataList.map(k => (d as any)[k])
   )
 
@@ -123,31 +135,55 @@ const ImpactAnalysis: React.FC = () => {
     </label>
   )
 
+  // Scale type selectors
+  const scaleSelector = (
+    axis: 'x' | 'y',
+    value: 'linear' | 'log',
+    setValue: React.Dispatch<React.SetStateAction<'linear' | 'log'>>
+  ) => (
+    <label style={{ marginRight: 16 }}>
+      {axis.toUpperCase()}-scale:&nbsp;
+      <select value={value} onChange={e => setValue(e.target.value as 'linear' | 'log')}>
+        <option value="linear">Linear</option>
+        <option value="log">Log</option>
+      </select>
+    </label>
+  )
+
   return (
     <div>
       <h2>Impact Analysis</h2>
       <div style={{ marginBottom: 16 }}>
         {axisSelector('x', xMetric, setXMetric)}
         {axisSelector('y', yMetric, setYMetric)}
+        <br />
+        {scaleSelector('x', xAxisType, setXAxisType)}
+        {scaleSelector('y', yAxisType, setYAxisType)}
       </div>
       <Plot
         data={[
           {
             x: getMetricArray(xMetric),
             y: getMetricArray(yMetric),
-            text: data.map(d => d.title),
+            text: data.map((d: ImpactAnalysisData) => d.title),
             customdata: customData,
             type: 'scattergl',
             mode: 'markers',
             marker: { size: 7, opacity: 0.7, color: '#636efa' },
             hovertemplate: hoverTemplate,
-            hovertext: data.map(d => d.title)
+            hovertext: data.map((d: ImpactAnalysisData) => d.title)
           }
         ]}
         layout={{
           title: { text: 'Impact analysis' },
-          xaxis: { title: {text: metricsLabels[xMetric] }},
-          yaxis: { title: {text: metricsLabels[yMetric] }},
+          xaxis: { 
+            title: { text: metricsLabels[xMetric] },
+            type: xAxisType
+          },
+          yaxis: { 
+            title: { text: metricsLabels[yMetric] },
+            type: yAxisType
+          },
           autosize: true,
           margin: { l: 60, r: 40, b: 60, t: 60 },
         }}

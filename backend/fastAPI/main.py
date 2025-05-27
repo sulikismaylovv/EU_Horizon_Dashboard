@@ -8,7 +8,16 @@ from typing import Optional, List, Dict, Any
 from datetime import date, datetime
 import pandas as pd # Import pandas
 import numpy as np
-from fastapi.responses import JSONResponse
+import ast
+import traceback
+
+# Optional imports with fallbacks
+try:
+    import pycountry
+    HAS_PYCOUNTRY = True
+except ImportError:
+    HAS_PYCOUNTRY = False
+    print("Warning: pycountry not installed. Country code conversion will use a fallback mapping.")
 
 # Load environment variables from .env file
 load_dotenv()
@@ -252,71 +261,29 @@ class SeasonalityResponse(BaseModel):
     data: List[SeasonalityData]
     chart_type: str = "polar"
 
-class MapOrganizationData(BaseModel):
+# Impact Analysis Models
+class ImpactAnalysisData(BaseModel):
     id: int
-    name: str
-    country: Optional[str] = None
-    iso_alpha_3: Optional[str] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    activity_type: Optional[str] = None
-    role: Optional[str] = None
-    ec_contribution: Optional[float] = None
-
-class MapProjectData(BaseModel):
-    id: int
+    title: str
     acronym: Optional[str] = None
-    title: Optional[str] = None
+    total_cost: Optional[float] = None
     ec_max_contribution: Optional[float] = None
-    start_year: Optional[int] = None
-    funding_scheme: Optional[str] = None
-    field_class: Optional[str] = None
-    field: Optional[str] = None
-    sub_field: Optional[str] = None
+    total_cost_per_year: Optional[float] = None
+    ec_contribution_per_year: Optional[float] = None
+    n_institutions: Optional[int] = None
+    n_publications: Optional[int] = None
+    duration_days: Optional[int] = None
+    duration_years: Optional[int] = None
+    duration_months_remainder: Optional[int] = None
     niche: Optional[str] = None
-    coordinator_name: Optional[str] = None
+    framework_programme: Optional[str] = None
 
-class CountrySummaryData(BaseModel):
-    country: str
-    iso_alpha_3: Optional[str] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    total_contribution: float
-    project_count: int
-    log_contribution: float
-    euros_per_100k_inhabitants: Optional[float] = None
-    log_contribution_per_100k: Optional[float] = None
-
-class CollaborationEdge(BaseModel):
-    org1_name: str
-    org2_name: str
-    org1_lat: Optional[float] = None
-    org1_lon: Optional[float] = None
-    org2_lat: Optional[float] = None
-    org2_lon: Optional[float] = None
-    project_id: int
-    project_acronym: Optional[str] = None
-    project_title: Optional[str] = None
-    coordinator_name: Optional[str] = None
-
-class MapFilters(BaseModel):
-    country: Optional[str] = None
-    funding_scheme: Optional[str] = None
-    start_year: Optional[int] = None
-    field_class: Optional[List[str]] = None
-    field: Optional[List[str]] = None
-    sub_field: Optional[List[str]] = None
-    niche: Optional[List[str]] = None
-    activity_type: Optional[str] = None
-    role: Optional[str] = None
-
-class InteractiveMapResponse(BaseModel):
-    country_summary: List[CountrySummaryData]
-    organizations: List[MapOrganizationData]
-    projects: List[MapProjectData]
-    collaboration_edges: List[CollaborationEdge]
-    table_data: List[Dict[str, Any]]
-    available_filters: Dict[str, List[str]]
+class ImpactAnalysisResponse(BaseModel):
+    chart_title: str = "Impact Analysis"
+    data: List[ImpactAnalysisData]
+    metrics_options: List[str]
+    x_axis_label: str = "Total Cost (EUR)"
+    y_axis_label: str = "EC Contribution (EUR)"
 
 # --- FastAPI Endpoints ---
 
@@ -335,10 +302,6 @@ async def get_projects():
         projects_data = response.data
         if projects_data is None: # Handle case where data might be None from Supabase
              return []
-        # handle 'Infinity' and nan values
-        df = pd.DataFrame(projects_data)
-        df = df.replace(['Infinity',np.nan, np.inf], None)
-        projects_data = df.to_dict(orient="records")
         return projects_data
     except Exception as e:
         print(f"Error fetching projects: {e}") # Log the error
@@ -1563,6 +1526,106 @@ async def get_project_seasonality():
         print(f"Error generating project seasonality: {e}")
         raise HTTPException(status_code=500, detail=f"Error generating project seasonality: {str(e)}")
 
+@app.get("/analytics/impact-analysis", response_model=ImpactAnalysisResponse, tags=["Analytics"])
+async def get_impact_analysis():
+    """
+    Returns project data for impact analysis visualization.
+    Includes project metrics like funding, duration, publications, collaborations, etc.
+    """
+    try:
+        # Fetch projects data
+        proj_response = supabase.table("projects").select(
+            "id, title, acronym, total_cost, ec_max_contribution, duration_months, duration_days, framework_programme, niche"
+        ).execute()
+        
+        if not proj_response.data:
+            return ImpactAnalysisResponse(data=[], metrics_options=[])
+
+        proj_df = pd.DataFrame(proj_response.data)
+        
+        # Fetch publications data for publication counts
+        pub_response = supabase.table("publications").select("project_id").execute()
+        if pub_response.data:
+            pub_df = pd.DataFrame(pub_response.data)
+            pub_counts = pub_df.groupby('project_id').size().reset_index(name='n_publications')
+            proj_df = pd.merge(proj_df, pub_counts, left_on='id', right_on='project_id', how='left')
+        
+        # Fetch organization data for institution counts
+        po_response = supabase.table("project_organizations").select("project_id, organization_id").execute()
+        if po_response.data:
+            po_df = pd.DataFrame(po_response.data)
+            org_counts = po_df.groupby('project_id').size().reset_index(name='n_institutions')
+            proj_df = pd.merge(proj_df, org_counts, left_on='id', right_on='project_id', how='left')
+        
+        # Fill missing values
+        proj_df['n_publications'] = proj_df['n_publications'].fillna(0)
+        proj_df['n_institutions'] = proj_df['n_institutions'].fillna(1)
+        
+        # Convert numeric columns
+        numeric_cols = ['total_cost', 'ec_max_contribution', 'duration_months', 'duration_days']
+        for col in numeric_cols:
+            proj_df[col] = pd.to_numeric(proj_df[col], errors='coerce')
+        
+        # Calculate derived metrics
+        proj_df['total_cost_per_year'] = proj_df['total_cost'] / (proj_df['duration_months'] / 12)
+        proj_df['ec_contribution_per_year'] = proj_df['ec_max_contribution'] / (proj_df['duration_months'] / 12)
+        proj_df['duration_years'] = proj_df['duration_months'] // 12
+        proj_df['duration_months_remainder'] = proj_df['duration_months'] % 12
+        
+        # Handle infinite values
+        proj_df = proj_df.replace([float('inf'), -float('inf')], None)
+        
+        # Clean scientific field columns for better display
+        if 'niche' in proj_df.columns:
+            proj_df['niche'] = proj_df['niche'].astype(str).str.replace("['", "").str.replace("']", "").str.replace("', '", ", ")
+        
+        # Limit to reasonable dataset size for frontend
+        proj_df = proj_df.head(1000)
+        
+        result_data = []
+        for _, row in proj_df.iterrows():
+            try:
+                result_data.append(ImpactAnalysisData(
+                    id=int(row['id']),
+                    title=str(row['title']) if pd.notna(row['title']) else f"Project {row['id']}",
+                    acronym=str(row['acronym']) if pd.notna(row['acronym']) else None,
+                    total_cost=float(row['total_cost']) if pd.notna(row['total_cost']) else None,
+                    ec_max_contribution=float(row['ec_max_contribution']) if pd.notna(row['ec_max_contribution']) else None,
+                    total_cost_per_year=float(row['total_cost_per_year']) if pd.notna(row['total_cost_per_year']) else None,
+                    ec_contribution_per_year=float(row['ec_contribution_per_year']) if pd.notna(row['ec_contribution_per_year']) else None,
+                    n_institutions=int(row['n_institutions']) if pd.notna(row['n_institutions']) else None,
+                    n_publications=int(row['n_publications']) if pd.notna(row['n_publications']) else None,
+                    duration_days=int(row['duration_days']) if pd.notna(row['duration_days']) else None,
+                    duration_years=int(row['duration_years']) if pd.notna(row['duration_years']) else None,
+                    duration_months_remainder=int(row['duration_months_remainder']) if pd.notna(row['duration_months_remainder']) else None,
+                    niche=str(row['niche']) if pd.notna(row['niche']) else None,
+                    framework_programme=str(row['framework_programme']) if pd.notna(row['framework_programme']) else None
+                ))
+            except Exception as e:
+                print(f"Error processing row {row['id']}: {e}")
+                continue
+        
+        metrics_options = [
+            'total_cost',
+            'ec_max_contribution', 
+            'total_cost_per_year',
+            'ec_contribution_per_year',
+            'n_institutions',
+            'n_publications',
+            'duration_days'
+        ]
+        
+        return ImpactAnalysisResponse(
+            data=result_data,
+            metrics_options=metrics_options,
+            x_axis_label="Total Cost (EUR)",
+            y_axis_label="EC Contribution (EUR)"
+        )
+        
+    except Exception as e:
+        print(f"Error generating impact analysis: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating impact analysis: {str(e)}")
+
 @app.get("/analytics/available-countries", tags=["Analytics"])
 async def get_available_countries():
     """
@@ -1719,11 +1782,28 @@ async def get_interactive_map_data(
 
         def iso2_to_iso3(iso2):
             """Convert ISO2 country code to ISO3"""
-            import pycountry
-            try:
-                return pycountry.countries.get(alpha_2=iso2).alpha_3
-            except:
-                return None
+            if HAS_PYCOUNTRY:
+                try:
+                    return pycountry.countries.get(alpha_2=iso2).alpha_3
+                except:
+                    return None
+            else:
+                # Fallback mapping for common countries
+                iso2_to_iso3_map = {
+                    'GB': 'GBR', 'CH': 'CHE', 'FR': 'FRA', 'AU': 'AUS', 'FI': 'FIN', 
+                    'DK': 'DNK', 'ES': 'ESP', 'SI': 'SVN', 'LT': 'LTU', 'PL': 'POL',
+                    'NL': 'NLD', 'PT': 'PRT', 'BE': 'BEL', 'DE': 'DEU', 'US': 'USA',
+                    'NO': 'NOR', 'TR': 'TUR', 'ZA': 'ZAF', 'SK': 'SVK', 'BG': 'BGR',
+                    'RO': 'ROU', 'GR': 'GRC', 'IL': 'ISR', 'IT': 'ITA', 'EE': 'EST',
+                    'IE': 'IRL', 'HU': 'HUN', 'CZ': 'CZE', 'AT': 'AUT', 'LV': 'LVA',
+                    'UA': 'UKR', 'SE': 'SWE', 'CY': 'CYP', 'MT': 'MLT', 'LU': 'LUX',
+                    'CN': 'CHN', 'IN': 'IND', 'KR': 'KOR', 'RS': 'SRB', 'EG': 'EGY',
+                    'AR': 'ARG', 'HR': 'HRV', 'AM': 'ARM', 'BR': 'BRA', 'CA': 'CAN',
+                    'TN': 'TUN', 'IS': 'ISL', 'AL': 'ALB', 'MX': 'MEX', 'ME': 'MNE',
+                    'JP': 'JPN', 'NZ': 'NZL', 'SG': 'SGP', 'MY': 'MYS', 'TH': 'THA',
+                    'VN': 'VNM', 'ID': 'IDN', 'PH': 'PHL', 'HK': 'HKG', 'TW': 'TWN'
+                }
+                return iso2_to_iso3_map.get(iso2)
 
         # 1. Fetch project_organizations data with limit to avoid overwhelming the connection
         po_query = supabase.table("project_organizations").select("*").limit(limit)
@@ -2035,60 +2115,3 @@ async def get_interactive_map_data(
     except Exception as e:
         print(f"Error generating interactive map data: {e}")
         raise HTTPException(status_code=500, detail=f"Error generating interactive map data: {str(e)}")
-    
-@app.get("/projects_impact_analysis", tags=["Projects"])
-async def get_projects_impact_analysis():
-    """
-    Loads project data from Supabase, joins with publications, and outputs columns as in the impact analysis notebook.
-    """
-    try:
-        # 1. Fetch projects and publications
-        projects_resp = supabase.table("projects").select("*").execute()
-        publications_resp = supabase.table("publications").select("project_id").execute()
-        if not projects_resp.data:
-            return []
-        df = pd.DataFrame(projects_resp.data)
-        pubs = pd.DataFrame(publications_resp.data) if publications_resp.data else pd.DataFrame(columns=["project_id"])
-
-        # 2. Count publications per project
-        n_publications = pubs.groupby('project_id').size().rename('n_publications')
-        df = df.merge(n_publications, left_on='id', right_on='project_id', how='outer')
-        df['n_publications'] = df['n_publications'].fillna(0)
-
-        # 3. Add duration_months_remainder
-        if 'duration_months' in df.columns:
-            df['duration_months_remainder'] = df['duration_months'] % 12
-        else:
-            df['duration_months_remainder'] = None
-
-        # 4. Format scientific field columns for printing
-        for column in ['field_class', 'field', 'sub_field', 'niche']:
-            if column in df.columns:
-                df[column] = df[column].apply(
-                    lambda x: x[2:-2].replace("', '", ", ") if isinstance(x, str) and x.startswith("[['") and x.endswith("']]") else x
-                )
-
-        # 5. Fill missing values as in notebook
-        if 'total_cost' in df.columns:
-            df['total_cost'] = df['total_cost'].fillna('Unknown')
-        if 'n_publications' in df.columns:
-            df['n_publications'] = df['n_publications'].fillna(0)
-
-        # 6. Select columns to match notebook output
-        columns_needed = [
-            'id', 'acronym', 'status', 'title', 'total_cost', 'ec_max_contribution',
-            'duration_days', 'duration_months',
-            'duration_years', 'n_institutions', 'ec_contribution_per_year', 
-            'total_cost_per_year','niche', 
-            'n_publications', 'duration_months_remainder'
-        ]
-        columns_final = [c for c in columns_needed if c in df.columns]
-        # Replace all NaN and infinite values with None for JSON compliance
-        df = df.replace([np.nan, np.inf, -np.inf], None)
-        result = df[columns_final].to_dict(orient="records")
-        return JSONResponse(content=result)
-    except Exception as e:
-        print(f"Error in /projects_impact_analysis: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Error in /projects_impact_analysis: {str(e)}")
