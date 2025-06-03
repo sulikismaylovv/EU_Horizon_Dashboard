@@ -1,175 +1,408 @@
-# Horizon Europe Interactive Dashboard
+# EU Horizon Dashboard
 
-This project develops an interactive Python-based dashboard for exploring, visualizing, and analyzing Horizon Europe research projects funded by the European Union (2021–2027). The dashboard facilitates exploration of funding distributions, collaboration networks, thematic and temporal trends, and project outcomes, providing valuable insights for analysts, policymakers, and stakeholders.
+An interactive full-stack web application for exploring, visualizing, and analyzing Horizon Europe research projects funded by the European Union (2021–2027). The dashboard provides comprehensive analytics on funding distributions, collaboration networks, thematic trends, and project outcomes through modern web technologies.
 
 ---
 
-## Project Structure
+## 🏗️ Architecture
+
+This project uses a modern **React + FastAPI** architecture:
+
+- **Frontend**: React 19 with TypeScript, Plotly.js for visualizations, and Tailwind CSS
+- **Backend**: FastAPI with Python 3.x, providing RESTful API endpoints
+- **Database**: Supabase (PostgreSQL) for data storage and real-time capabilities
+- **Data Processing**: ETL pipelines using pandas and custom Python scripts
+
+## 🌐 Live Demo
+
+- **Backend API**: [http://54.93.51.85:8000/](http://54.93.51.85:8000/)
+- **API Documentation**: [http://54.93.51.85:8000/docs](http://54.93.51.85:8000/docs) (OpenAPI/Swagger UI)
+
+---
+
+## 📁 Project Structure
 
 ```
-EU_HORIZON_DASHBOARD/
+EU_Horizon_Dashboard/
 │
-├── backend/                         # All backend/data logic lives here
-│   ├── etl/                         # Data ingestion, cleaning, transformation, load
-│   │   ├── __init__.py
-│   │   ├── ingestion.py
-│   │   ├── cleaning.py
-│   │   ├── transform.py
-│   │   ├── load_to_db.py
-│   │   └── ...
+├── backend/                         # Python backend with FastAPI
+│   ├── fastAPI/                     # FastAPI application
+│   │   ├── main.py                  # Main FastAPI app with all endpoints
+│   │   └── routes/                  # Additional route modules
 │   │
-│   ├── db/                          # Database schema, migration, and connection logic
-│   │   ├── __init__.py
-│   │   ├── schema.sql               # SQL to create tables
-│   │   ├── supabase_client.py       # Handles connections, inserts, etc.
-│   │   └── migrate.py               # Optional: migration scripts
+│   ├── etl/                         # Data processing pipeline
+│   │   ├── ingestion.py            # Data ingestion from CORDIS
+│   │   ├── cleaning.py             # Data cleaning and validation
+│   │   ├── transform.py            # Data transformation and enrichment
+│   │   └── load_to_db.py           # Database loading utilities
 │   │
-│   ├── models/                      # ML/NLP models, pipelines, forecasting, etc.
-│   │   ├── __init__.py
-│   │   ├── topic_modelling.py
-│   │   ├── forecasting.py
-│   │   └── ...
+│   ├── db/                          # Database connection and management
+│   │   ├── supabase_client.py      # Supabase connection setup
+│   │   └── validate_schema.py      # Database schema validation
 │   │
-│   ├── api/                         # Custom API (FastAPI, Flask, etc.)
-│   │   ├── __init__.py
-│   │   ├── main.py                  # Entrypoint
-│   │   └── endpoints/               # (Optional) subfolder per endpoint
+│   ├── models/                      # ML/AI models and predictions
+│   │   ├── forecasting.py          # Funding forecasting models
+│   │   └── train_predictive_models.py
 │   │
-│   ├── utils/                       # General utilities/helpers
-│   │   ├── __init__.py
-│   │   ├── save_load.py
-│   │   └── viz_utils.py
+│   ├── classes/                     # Data classes and models
+│   │   ├── cordis_data.py          # CORDIS data handling
+│   │   └── project_data.py         # Individual project analysis
 │   │
-│   ├── config.py
-│   └── preprocess_data.py           # Main orchestration for ETL pipeline
+│   ├── utils/                       # Utility functions
+│   │   ├── plots.py                # Plotting utilities
+│   │   ├── save_load.py            # File I/O operations
+│   │   └── topic_modelling.py      # NLP and topic modeling
+│   │
+│   ├── config.py                    # Configuration management
+│   ├── init_env.py                  # Environment initialization
+│   └── preprocess_data.py           # Main ETL orchestrator
 │
-├── frontend/                        # Modern dashboard (React, Next.js, Shiny, Streamlit, etc.)
-│   ├── public/
-│   ├── src/
-│   ├── package.json
-│   └── ... (JS/CSS/TSX files)
+├── frontend/                        # React TypeScript frontend
+│   ├── public/                      # Static assets
+│   ├── src/                         # React components and logic
+│   │   ├── components/              # Reusable React components
+│   │   ├── App.tsx                  # Main application component
+│   │   └── index.tsx                # Application entry point
+│   ├── package.json                 # Node.js dependencies
+│   ├── tsconfig.json                # TypeScript configuration
+│   └── vercel.json                  # Vercel deployment config
 │
-├── data/                            # Data, never version control large files
-│   ├── raw/
-│   ├── interim/
-│   └── processed/
+├── data/                            # Data storage (not version controlled)
+│   ├── raw/                         # Original CORDIS CSV files
+│   ├── interim/                     # Intermediate processing results
+│   └── processed/                   # Final processed data files
 │
-├── notebooks/                       # Prototyping, profiling, exploration (never for prod code)
+├── notebooks/                       # Jupyter notebooks for analysis
 │   ├── 01_data_preparation.ipynb
-│   └── ...
+│   ├── 02_funding_analysis.ipynb
+│   ├── 03_collaboration_network.ipynb
+│   ├── 04_thematic_trends.ipynb
+│   └── 05_predictive_analysis.ipynb
 │
-├── tests/                           # Automated tests (pytest, unit tests)
-│   ├── backend/
-│   └── frontend/
+├── supabase/                        # Supabase configuration
+│   ├── config.toml
+│   └── migrations/                  # Database migration files
 │
-├── .env                             # Secrets (never commit!)
-├── .gitignore
-├── README.md
-├── requirements.txt                 # Python requirements for backend/ETL
-├── environment.yml                  # (Optional) Conda env for reproducibility
-├── LICENSE
-└── docker-compose.yml               # (Optional) Orchestrate backend/frontend locally
-
+├── main.py                          # CLI tool for data processing
+├── requirements.txt                 # Python dependencies
+└── README.md                        # This file
 ```
 
 ---
 
-## Installation and Setup
+## 🚀 Quick Start
+
+### Prerequisites
+
+- **Python 3.8+** (for backend)
+- **Node.js 16+** (for frontend)
+- **Git** for version control
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/horizon-dashboard.git
-cd horizon-dashboard
+git clone https://github.com/yourusername/EU_Horizon_Dashboard.git
+cd EU_Horizon_Dashboard
 ```
 
-### 2. Set Up Python Environment
-
-It's recommended to use a virtual environment.
+### 2. Backend Setup
 
 ```bash
+# Create and activate Python virtual environment
 python -m venv env
 source env/bin/activate  # On Windows: env\Scripts\activate
+
+# Install Python dependencies
 pip install -r requirements.txt
 ```
 
-### 3. Data Preparation
-
-Place your downloaded dataset files into the `data/raw/` folder. Run preprocessing scripts:
+### 3. Frontend Setup
 
 ```bash
-python scripts/preprocess_data.py
+cd frontend
+npm install
 ```
 
-### 4. Running the Dashboard
+### 4. Environment Configuration
 
-To run the Dash application locally:
+Create a `.env` file in the project root with your credentials:
 
 ```bash
-python app/app.py
+SUPABASE_URL=your_supabase_url
+SUPABASE_SERVICE_KEY=your_service_key
+SUPABASE_ANON_KEY=your_anon_key
 ```
 
-Navigate to `http://localhost:8050/` in your browser.
+### 5. Data Processing (Optional)
 
----
-
-## Dashboard Features
-
-- **Funding Allocation Dashboard:** Interactive maps and charts of EU research funding.
-- **Collaboration Network Dashboard:** Visualize institutional and national collaboration patterns.
-- **Project Outcomes Dashboard:** Analysis of publications and deliverables.
-- **Thematic and Temporal Trends Dashboard:** Explore thematic evolutions and yearly trends.
-- **Predictive Analytics:** Forecast funding and thematic trends.
-
----
-
-## Deployment
-
-The dashboard is deployable using Docker:
+If you have raw CORDIS data, process it using:
 
 ```bash
-# Build Docker image
-docker build -t horizon-dashboard -f deployment/Dockerfile .
+# Run the full ETL pipeline
+python main.py preprocess
 
-# Run Docker container
-docker run -p 8050:8050 horizon-dashboard
+# Load processed data to database
+python main.py load
 ```
 
-Access the dashboard via `http://localhost:8050/`.
+### 6. Running the Application
+
+**Backend (FastAPI):**
+```bash
+cd backend/fastAPI
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**Frontend (React):**
+```bash
+cd frontend
+npm start
+```
+
+The application will be available at:
+- Frontend: [http://localhost:3000](http://localhost:3000)
+- Backend API: [http://localhost:8000](http://localhost:8000)
+- API Documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ---
 
-## Testing
+## 🎯 Dashboard Features
 
-Execute tests to ensure functionality:
+### Analytics Endpoints
+
+The backend provides comprehensive analytics through RESTful API endpoints:
+
+- **🗺️ Interactive Maps**: Geographic visualization of funding and collaborations
+- **📊 Funding Analysis**: Distribution analysis by country, institution, and program
+- **🔗 Collaboration Networks**: Institutional and cross-border collaboration patterns
+- **📈 Time Series Analysis**: Funding trends and project timelines
+- **🎯 Thematic Analysis**: Research field distribution and evolution
+- **🔍 Project Search**: Advanced filtering and project details
+- **📚 Publication Analytics**: Research output and impact analysis
+- **🤖 Predictive Models**: Funding forecasts and trend predictions
+
+### Frontend Components
+
+- **Interactive Map Component**: Real-time filtering and geographic visualization
+- **Chart Gallery**: Various chart types using Plotly.js and Recharts
+- **Data Tables**: Sortable and filterable project listings
+- **Responsive Design**: Mobile-friendly interface with Tailwind CSS
+
+---
+
+## 🛠️ Technology Stack
+
+### Backend
+- **FastAPI**: Modern, fast web framework for building APIs
+- **Python 3.x**: Core programming language
+- **Pandas**: Data manipulation and analysis
+- **Supabase**: PostgreSQL database with real-time features
+- **Pydantic**: Data validation and serialization
+- **Uvicorn**: ASGI server for FastAPI
+
+### Frontend
+- **React 19**: Modern JavaScript library for user interfaces
+- **TypeScript**: Type-safe JavaScript development
+- **Plotly.js**: Interactive scientific charting library
+- **Recharts**: Composable charting library for React
+- **Tailwind CSS**: Utility-first CSS framework
+- **React Plotly.js**: React wrapper for Plotly.js
+
+### Data & ML
+- **Pandas**: Data processing and analysis
+- **NumPy**: Numerical computing
+- **Scikit-learn**: Machine learning algorithms
+- **BERTopic**: Advanced topic modeling
+- **NetworkX**: Network analysis and graph algorithms
+
+---
+
+## 📡 API Reference
+
+### Base URLs
+- **Production**: `http://54.93.51.85:8000`
+- **Local Development**: `http://localhost:8000`
+
+### Key Endpoints
 
 ```bash
-pytest tests/
+# Interactive Map Data
+GET /analytics/interactive-map
+
+# Funding Analysis
+GET /analytics/funding-by-country
+GET /analytics/ec-by-country
+
+# Project Information
+GET /projects
+GET /projects/{project_id}
+
+# Collaboration Networks
+GET /analytics/collaboration-network
+
+# Research Analytics
+GET /analytics/research-field-network
+GET /analytics/topic-evolution
+
+# Time Series Data
+GET /analytics/project-timeline
+GET /analytics/participation-trends
+```
+
+For complete API documentation, visit the interactive docs at `/docs` endpoint.
+
+---
+
+## 🔧 Development
+
+### Running Tests
+
+```bash
+# Backend tests
+cd backend
+python -m pytest tests/
+
+# Frontend tests
+cd frontend
+npm test
+```
+
+### Code Quality
+
+```bash
+# Python code formatting
+black backend/
+flake8 backend/
+
+# TypeScript/React linting
+cd frontend
+npm run lint
+```
+
+### Database Management
+
+```bash
+# Validate database schema
+python main.py validate-schema
+
+# Load processed data
+python main.py load
+
+# Run specific ETL stages
+python main.py preprocess --transform --no-clean
 ```
 
 ---
 
-## Documentation
+## 🚀 Deployment
 
-Detailed project documentation and user guides can be found in the `docs/` directory.
+### Production Backend
+
+The backend is currently deployed and accessible at:
+- **API Base URL**: [http://54.93.51.85:8000](http://54.93.51.85:8000)
+- **Health Check**: [http://54.93.51.85:8000/](http://54.93.51.85:8000/)
+- **OpenAPI Docs**: [http://54.93.51.85:8000/docs](http://54.93.51.85:8000/docs)
+
+### Local Development
+
+```bash
+# Using Docker Compose (if available)
+docker-compose up --build
+
+# Manual deployment
+# Backend
+cd backend/fastAPI
+uvicorn main:app --host 0.0.0.0 --port 8000
+
+# Frontend
+cd frontend
+npm run build
+npm start
+```
+
+### Environment Variables
+
+Required environment variables for production:
+
+```bash
+SUPABASE_URL=your_production_supabase_url
+SUPABASE_SERVICE_KEY=your_service_key
+SUPABASE_ANON_KEY=your_anon_key
+NODE_ENV=production
+```
 
 ---
 
-## Resources and Example Projects
+## 📊 Data Sources
 
-- [European Commission Horizon Dashboard](https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/horizon-dashboard)
-- [CORDIS EU Research Results](https://cordis.europa.eu/)
+This project uses data from the **CORDIS** (Community Research and Development Information Service) database:
+
+- **Projects**: Horizon Europe project information
+- **Organizations**: Research institutions and companies
+- **Publications**: Scientific publications from projects
+- **Legal Basis**: Funding schemes and programs
+- **Scientific Vocabulary**: Research field classifications
+
+### Data Processing Pipeline
+
+1. **Ingestion**: Download raw CSV files from CORDIS
+2. **Cleaning**: Handle missing values and data inconsistencies
+3. **Transformation**: Enrich data with geographic coordinates, topic modeling
+4. **Loading**: Store processed data in Supabase PostgreSQL database
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Please follow these steps:
+
+1. **Fork** the repository
+2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
+3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
+4. **Push** to the branch (`git push origin feature/amazing-feature`)
+5. **Open** a Pull Request
+
+### Development Guidelines
+
+- Follow **PEP 8** for Python code
+- Use **ESLint** rules for TypeScript/React
+- Add **tests** for new features
+- Update **documentation** as needed
+- Keep commits **atomic** and well-described
+
+---
+
+## 📋 Project Status
+
+- ✅ **Backend API**: Fully functional with 20+ analytics endpoints
+- ✅ **Database**: Complete ETL pipeline with Supabase integration
+- ✅ **Frontend**: React components with interactive visualizations
+- ✅ **Production Deployment**: Backend hosted and accessible
+- 🚧 **Frontend Deployment**: In progress
+- 🚧 **Advanced ML Models**: Topic modeling and predictions
+- 📋 **Documentation**: Comprehensive API and user guides
+
+---
+
+## 📚 Resources and References
+
+- [Horizon Europe Programme](https://ec.europa.eu/info/research-and-innovation/funding/funding-opportunities/funding-programmes-and-open-calls/horizon-europe_en)
+- [CORDIS Database](https://cordis.europa.eu/)
 - [CORDIS Datalab](https://cordis.europa.eu/datalab/datalab.php)
-- [Horizon 2020 Dashboard](https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/horizon-dashboard)
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [React Documentation](https://react.dev/)
+- [Supabase Documentation](https://supabase.com/docs)
 
 ---
 
-## Contributing
+## 📄 License
 
-Contributions to enhance this project are welcome. Please create pull requests and clearly document your changes.
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## License
+## 👥 Team
 
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
+Developed by **MDA Group 20** as part of the EU Horizon research analysis project.
+
+For questions, issues, or contributions, please open an issue on GitHub or contact the development team.
