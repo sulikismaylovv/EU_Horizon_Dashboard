@@ -89,10 +89,9 @@ interface MapFilters {
 }
 
 const InteractiveMap: React.FC = () => {
-  const [rawData, setRawData] = useState<InteractiveMapResponse | null>(null);
+  const [data, setData] = useState<InteractiveMapResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filteringInProgress, setFilteringInProgress] = useState(false);
   const [filters, setFilters] = useState<MapFilters>({
     country: null,
     funding_scheme: null,
@@ -105,26 +104,33 @@ const InteractiveMap: React.FC = () => {
     role: null,
   });
   const [showPerCapita, setShowPerCapita] = useState(false);
+  const [showNetwork, setShowNetwork] = useState(false);
   const [showOrgPins, setShowOrgPins] = useState(true);
   const [selectedCountry, setSelectedCountry] = useState<string>('all');
 
-  // Fetch data only once on component mount
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
         console.log('Fetching interactive map data...');
         
+        // Build query parameters
+        const params = new URLSearchParams();
+        Object.entries(filters).forEach(([key, value]) => {
+          if (value !== null && value !== '') {
+            params.append(key, value.toString());
+          }
+        });
         const endpoint = process.env.NODE_ENV === 'development'
           ? '/analytics/interactive-map' // CRA will proxy this to http://localhost:8000
           : '/api/analytics/interactive-map'; // Vercel will rewrite this to your catch-all
-        const response = await fetch(endpoint);
+        const response = await fetch(`${endpoint}?${params.toString()}`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const result = await response.json();
         console.log('Interactive map data received:', result);
-        setRawData(result);
+        setData(result);
       } catch (err) {
         console.error('Error fetching interactive map data:', err);
         setError(err instanceof Error ? err.message : 'An error occurred');
@@ -134,78 +140,7 @@ const InteractiveMap: React.FC = () => {
     };
 
     fetchData();
-  }, []); // Empty dependency array - fetch only once
-
-  // Apply filters to data on the client side
-  const filteredData = useMemo(() => {
-    if (!rawData) return null;
-
-    // Start with all data
-    let filteredOrganizations = [...rawData.organizations];
-    let filteredProjects = [...rawData.projects];
-    let filteredEdges = [...rawData.collaboration_edges];
-
-    // Apply organization filters
-    if (filters.country) {
-      filteredOrganizations = filteredOrganizations.filter(org => org.country === filters.country);
-    }
-    if (filters.activity_type) {
-      filteredOrganizations = filteredOrganizations.filter(org => org.activity_type === filters.activity_type);
-    }
-    if (filters.role) {
-      filteredOrganizations = filteredOrganizations.filter(org => org.role === filters.role);
-    }
-
-    // Apply project filters
-    if (filters.funding_scheme) {
-      filteredProjects = filteredProjects.filter(proj => proj.funding_scheme === filters.funding_scheme);
-    }
-    if (filters.start_year) {
-      filteredProjects = filteredProjects.filter(proj => proj.start_year?.toString() === filters.start_year);
-    }
-    if (filters.field_class) {
-      filteredProjects = filteredProjects.filter(proj => proj.field_class === filters.field_class);
-    }
-    if (filters.field) {
-      filteredProjects = filteredProjects.filter(proj => proj.field === filters.field);
-    }
-    if (filters.sub_field) {
-      filteredProjects = filteredProjects.filter(proj => proj.sub_field === filters.sub_field);
-    }
-    if (filters.niche) {
-      filteredProjects = filteredProjects.filter(proj => proj.niche === filters.niche);
-    }
-
-    // Get filtered project IDs for table data and collaboration edges
-    const filteredProjectIds = new Set(filteredProjects.map(p => p.id));
-    
-    // Filter collaboration edges
-    filteredEdges = filteredEdges.filter(edge => filteredProjectIds.has(edge.project_id));
-
-    // For country summary, we'll use a simplified approach
-    // Just filter the original country summary based on which countries have organizations
-    const availableCountries = new Set(filteredOrganizations.map(org => org.country));
-    const filteredCountrySummary = rawData.country_summary.filter(country => 
-      availableCountries.has(country.country)
-    );
-
-    // Create filtered table data
-    const filteredTableData = rawData.table_data.filter(tableRow => {
-      return filteredProjects.some(proj => proj.acronym === tableRow.project_acronym);
-    });
-
-    return {
-      ...rawData,
-      country_summary: filteredCountrySummary,
-      organizations: filteredOrganizations,
-      projects: filteredProjects,
-      collaboration_edges: filteredEdges,
-      table_data: filteredTableData,
-    };
-  }, [rawData, filters]);
-
-  // Use filtered data instead of raw data
-  const data = filteredData;
+  }, [filters]);
 
   const plotData = useMemo(() => {
     if (!data) return [];
@@ -308,8 +243,32 @@ const InteractiveMap: React.FC = () => {
       }
     }
 
+    // Collaboration network
+    if (showNetwork) {
+      data.collaboration_edges.forEach(edge => {
+        if (edge.org1_lat && edge.org1_lon && edge.org2_lat && edge.org2_lon) {
+          traces.push({
+            type: 'scattermapbox',
+            lat: [edge.org1_lat, edge.org2_lat],
+            lon: [edge.org1_lon, edge.org2_lon],
+            mode: 'lines',
+            line: {
+              width: 2,
+              color: 'blue',
+            },
+            opacity: 0.4,
+            hovertemplate: 
+              `<b>Project:</b> ${edge.project_acronym || 'N/A'}<br>` +
+              `<b>Title:</b> ${edge.project_title || 'N/A'}<br>` +
+              `<b>Coordinator:</b> ${edge.coordinator_name || 'N/A'}<extra></extra>`,
+            showlegend: false,
+          });
+        }
+      });
+    }
+
     return traces;
-  }, [data, showPerCapita, showOrgPins, selectedCountry]);
+  }, [data, showPerCapita, showNetwork, showOrgPins, selectedCountry]);
 
   const layout = useMemo(() => {
     const center = selectedCountry === 'all' 
@@ -340,10 +299,7 @@ const InteractiveMap: React.FC = () => {
   }, [selectedCountry, data]);
 
   const handleFilterChange = (key: keyof MapFilters, value: any) => {
-    setFilteringInProgress(true);
     setFilters(prev => ({ ...prev, [key]: value }));
-    // Reset filtering indicator after a short delay
-    setTimeout(() => setFilteringInProgress(false), 300);
   };
 
   const resetFilters = () => {
@@ -388,209 +344,210 @@ const InteractiveMap: React.FC = () => {
     <div className="w-full space-y-4">
       {/* Filter Controls */}
       <div className="bg-gray-50 p-4 rounded-lg">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-800">Filters</h3>
-          {filteringInProgress && (
-            <div className="flex items-center space-x-2 text-blue-600">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-              <span className="text-sm">Applying filters...</span>
-            </div>
-          )}
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {/* First Column */}
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Country:
-                </label>
-                <select
-                  value={selectedCountry}
-                  onChange={(e) => setSelectedCountry(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Countries</option>
-                  {rawData?.available_filters.countries.map(country => (
-                    <option key={country} value={country}>{country}</option>
-                  ))}
-                </select>
-              </div>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Country:
+              </label>
+              <select
+                value={selectedCountry}
+                onChange={(e) => setSelectedCountry(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Countries</option>
+                {data.available_filters.countries.map(country => (
+                  <option key={country} value={country}>{country}</option>
+                ))}
+              </select>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Funding Scheme:
-                </label>
-                <select
-                  value={filters.funding_scheme || ''}
-                  onChange={(e) => handleFilterChange('funding_scheme', e.target.value || null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All</option>
-                  {rawData?.available_filters.funding_schemes.map(scheme => (
-                    <option key={scheme} value={scheme}>{scheme}</option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Funding Scheme:
+              </label>
+              <select
+                value={filters.funding_scheme || ''}
+                onChange={(e) => handleFilterChange('funding_scheme', e.target.value || null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All</option>
+                {data.available_filters.funding_schemes.map(scheme => (
+                  <option key={scheme} value={scheme}>{scheme}</option>
+                ))}
+              </select>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Start Year:
-                </label>
-                <select
-                  value={filters.start_year || ''}
-                  onChange={(e) => handleFilterChange('start_year', e.target.value || null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All</option>
-                  {rawData?.available_filters.start_years.map(year => (
-                    <option key={year} value={year}>{year}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Field Class:
-                </label>
-                <select
-                  value={filters.field_class || ''}
-                  onChange={(e) => handleFilterChange('field_class', e.target.value || null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All</option>
-                  {rawData?.available_filters.field_classes.map(fieldClass => (
-                    <option key={fieldClass} value={fieldClass}>{fieldClass}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Field:
-                </label>
-                <select
-                  value={filters.field || ''}
-                  onChange={(e) => handleFilterChange('field', e.target.value || null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All</option>
-                  {rawData?.available_filters.fields.map(field => (
-                    <option key={field} value={field}>{field}</option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Start Year:
+              </label>
+              <select
+                value={filters.start_year || ''}
+                onChange={(e) => handleFilterChange('start_year', e.target.value || null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All</option>
+                {data.available_filters.start_years.map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
             </div>
           </div>
 
           {/* Second Column */}
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Sub Field:
-                </label>
-                <select
-                  value={filters.sub_field || ''}
-                  onChange={(e) => handleFilterChange('sub_field', e.target.value || null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All</option>
-                  {rawData?.available_filters.sub_fields.map(subField => (
-                    <option key={subField} value={subField}>{subField}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Niche:
-                </label>
-                <select
-                  value={filters.niche || ''}
-                  onChange={(e) => handleFilterChange('niche', e.target.value || null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All</option>
-                  {rawData?.available_filters.niches.map(niche => (
-                    <option key={niche} value={niche}>{niche}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Activity Type:
-                </label>
-                <select
-                  value={filters.activity_type || ''}
-                  onChange={(e) => handleFilterChange('activity_type', e.target.value || null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All</option>
-                  {rawData?.available_filters.activity_types.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Organization Role:
-                </label>
-                <select
-                  value={filters.role || ''}
-                  onChange={(e) => handleFilterChange('role', e.target.value || null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All</option>
-                  {rawData?.available_filters.roles.map(role => (
-                    <option key={role} value={role}>{role}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Options and Controls */}
-            <div className="bg-gray-100 p-4 rounded-lg">
-              <h4 className="text-sm font-medium text-gray-700 mb-3">Display Options</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={showPerCapita}
-                      onChange={(e) => setShowPerCapita(e.target.checked)}
-                      className="rounded"
-                    />
-                    <span className="text-sm font-medium text-gray-700">
-                      Show per 100k inhabitants
-                    </span>
-                  </label>
-                </div>
-
-                <div>
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={showOrgPins}
-                      onChange={(e) => setShowOrgPins(e.target.checked)}
-                      className="rounded"
-                    />
-                    <span className="text-sm font-medium text-gray-700">
-                      Show organization pins
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              <button
-                onClick={resetFilters}
-                className="w-full mt-4 px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Field Class:
+              </label>
+              <select
+                value={filters.field_class || ''}
+                onChange={(e) => handleFilterChange('field_class', e.target.value || null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                Reset All Filters
-              </button>
+                <option value="">All</option>
+                {data.available_filters.field_classes.map(fieldClass => (
+                  <option key={fieldClass} value={fieldClass}>{fieldClass}</option>
+                ))}
+              </select>
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Field:
+              </label>
+              <select
+                value={filters.field || ''}
+                onChange={(e) => handleFilterChange('field', e.target.value || null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All</option>
+                {data.available_filters.fields.map(field => (
+                  <option key={field} value={field}>{field}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Sub Field:
+              </label>
+              <select
+                value={filters.sub_field || ''}
+                onChange={(e) => handleFilterChange('sub_field', e.target.value || null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All</option>
+                {data.available_filters.sub_fields.map(subField => (
+                  <option key={subField} value={subField}>{subField}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Third Column */}
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Niche:
+              </label>
+              <select
+                value={filters.niche || ''}
+                onChange={(e) => handleFilterChange('niche', e.target.value || null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All</option>
+                {data.available_filters.niches.map(niche => (
+                  <option key={niche} value={niche}>{niche}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Activity Type:
+              </label>
+              <select
+                value={filters.activity_type || ''}
+                onChange={(e) => handleFilterChange('activity_type', e.target.value || null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All</option>
+                {data.available_filters.activity_types.map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Organization Role:
+              </label>
+              <select
+                value={filters.role || ''}
+                onChange={(e) => handleFilterChange('role', e.target.value || null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All</option>
+                {data.available_filters.roles.map(role => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Fourth Column */}
+          <div className="space-y-3">
+            <div>
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={showPerCapita}
+                  onChange={(e) => setShowPerCapita(e.target.checked)}
+                  className="rounded"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  Show per 100k inhabitants
+                </span>
+              </label>
+            </div>
+
+            <div>
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={showNetwork}
+                  onChange={(e) => setShowNetwork(e.target.checked)}
+                  className="rounded"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  Show collaboration network
+                </span>
+              </label>
+            </div>
+
+            <div>
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={showOrgPins}
+                  onChange={(e) => setShowOrgPins(e.target.checked)}
+                  className="rounded"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  Show organization pins
+                </span>
+              </label>
+            </div>
+
+            <button
+              onClick={resetFilters}
+              className="w-full px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
+            >
+              Reset Filters
+            </button>
           </div>
         </div>
       </div>
